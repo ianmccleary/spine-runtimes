@@ -31,15 +31,11 @@
 
 #include "SpineSkeleton.h"
 #include "SpineAnimationState.h"
-#ifdef SPINE_GODOT_EXTENSION
 #include "SpineCommon.h"
 #include <godot_cpp/classes/node2d.hpp>
 #include <godot_cpp/templates/vector.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/canvas_item_material.hpp>
-#else
-#include "scene/2d/node_2d.h"
-#endif
 
 class SpineSlotNode;
 
@@ -58,22 +54,14 @@ protected:
 	void _notification(int what);
 	static void _bind_methods();
 
-#ifdef SPINE_GODOT_EXTENSION
 	PackedVector2Array vertices;
 	PackedVector2Array uvs;
 	PackedColorArray colors;
 	PackedInt32Array indices;
-#else
-	Vector<Vector2> vertices;
-	Vector<Vector2> uvs;
-	Vector<Color> colors;
-	Vector<int> indices;
-#endif
 	SpineRendererObject *renderer_object;
 
 	bool indices_changed;
 
-#if VERSION_MAJOR > 3
 	RID mesh;
 	uint32_t surface_offsets[RS::ARRAY_MAX];
 	int num_vertices;
@@ -83,51 +71,20 @@ protected:
 	uint32_t vertex_stride;
 	uint32_t normal_tangent_stride;
 	uint32_t attribute_stride;
-#else
-	RID mesh;
-	uint32_t surface_offsets[VS::ARRAY_MAX];
-	int num_vertices;
-	int num_indices;
-	uint32_t mesh_surface_offsets[VS::ARRAY_MAX];
-	PoolByteArray mesh_buffer;
-	uint32_t mesh_stride[VS::ARRAY_MAX];
-	uint32_t mesh_surface_format;
-#endif
 
 public:
-#if VERSION_MAJOR > 3
 	SpineMesh2D() : renderer_object(nullptr), indices_changed(true), num_vertices(0), num_indices(0), vertex_stride(0), normal_tangent_stride(0), attribute_stride(0){};
 	~SpineMesh2D() {
 		if (mesh.is_valid()) {
-#ifdef SPINE_GODOT_EXTENSION
 			RS::get_singleton()->free_rid(mesh);
-#else
-			RS::get_singleton()->free(mesh);
-#endif
 		}
 	}
-#else
-	SpineMesh2D() : renderer_object(nullptr), indices_changed(true), num_vertices(0), num_indices(0){};
-	~SpineMesh2D() {
-		if (mesh.is_valid()) {
-			VS::get_singleton()->free(mesh);
-		}
-	}
-#endif
 
-#ifdef SPINE_GODOT_EXTENSION
 	void update_mesh(const PackedVector2Array &vertices,
 					 const PackedVector2Array &uvs,
 					 const PackedColorArray &colors,
 					 const PackedInt32Array &indices,
 					 SpineRendererObject *renderer_object);
-#else
-	void update_mesh(const Vector<Point2> &vertices,
-					 const Vector<Point2> &uvs,
-					 const Vector<Color> &colors,
-					 const Vector<int> &indices,
-					 SpineRendererObject *renderer_object);
-#endif
 };
 
 class SpineSprite : public Node2D,
