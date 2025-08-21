@@ -298,14 +298,12 @@ void SpineMesh3D::update_mesh()
 	RS::get_singleton()->mesh_set_custom_aabb(mesh, aabb_new);
 }
 
-void SpineMesh3D::set_material(Ref<Material> material)
+void SpineMesh3D::set_material(Ref<Material> new_material)
 {
-	if (mesh.is_valid())
+	if (material != new_material)
 	{
-		if (RS::get_singleton()->mesh_get_surface_count(mesh) > 0)
-		{
-			RS::get_singleton()->instance_geometry_set_material_override(get_instance(), material.is_valid() ? material->get_rid() : RID());
-		}
+		material = new_material;
+		RS::get_singleton()->instance_geometry_set_material_override(get_instance(), material.is_valid() ? material->get_rid() : RID());
 	}
 }
 

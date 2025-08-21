@@ -65,6 +65,7 @@ protected:
 	bool indices_changed;
 
 	RID mesh;
+	Ref<Material> material;
 	uint32_t surface_offsets[RS::ARRAY_MAX];
 	int num_vertices;
 	int num_indices;
@@ -79,7 +80,7 @@ public:
 	~SpineMesh3D();
 
 	void update_mesh();
-	void set_material(Ref<Material> material);
+	void set_material(Ref<Material> new_material);
 };
 
 class SpineSprite : public Node3D,
