@@ -3,17 +3,13 @@
 [ext_resource type="Script" uid="uid://dkrdeetuhx1sh" path="res://examples/01-helloworld/spineboy-helloworld.gd" id="1"]
 [ext_resource type="SpineSkeletonDataResource" uid="uid://cb6rn6vonqbx0" path="res://assets/spineboy/spineboy-data-res.tres" id="3"]
 
-[node name="Node2D" type="Node2D"]
+[node name="Node2D" type="Node3D"]
 
 [node name="Spineboy" type="SpineSprite" parent="."]
 skeleton_data_res = ExtResource("3")
-bones_color = Color(0.968627, 1, 0, 0.501961)
-paths_color = Color(1, 0.498039, 0, 0.466667)
-paths_clipping = Color(0.8, 0, 0, 0.5)
 preview_skin = "Default"
 preview_animation = "run"
 preview_frame = true
 preview_time = 0.24
-position = Vector2(505, 466)
-scale = Vector2(0.466832, 0.466832)
+transform = Transform3D(0.466832, 0, 0, 0, 0.466832, 0, 0, 0, 0, 505, 466, 0)
 script = ExtResource("1")
