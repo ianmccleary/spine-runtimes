@@ -102,9 +102,9 @@ protected:
 	bool preview_frame;
 	float preview_time;
 
-	bool use_sorting_offset = false;
-	float sorting_offset_multiplier = 1.f;
-	bool use_aabb_sorting = true;
+	bool use_sorting_offset = true;
+	float sorting_offset_multiplier = .1f;
+	bool use_aabb_sorting = false;
 
 	spine::Vector<spine::Vector<SpineSlotNode *>> slot_nodes;
 	Vector<SpineMesh3D *> mesh_instances;
