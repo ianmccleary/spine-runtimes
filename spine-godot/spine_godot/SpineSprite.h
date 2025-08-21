@@ -77,7 +77,7 @@ public:
 	SpineMesh3D();
 	~SpineMesh3D();
 
-	void update_mesh(SpineRendererObject *renderer_object);
+	void update_mesh();
 	void set_material(Ref<Material> material);
 };
 

@@ -813,6 +813,8 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				mesh_instance->set_material(custom_material);
 			else
 				mesh_instance->set_material(statics.default_materials[slot->getData().getBlendMode()]);
+			
+			mesh_instance->update_mesh();
 		}
 		skeleton_clipper->clipEnd(*slot);
 	}
