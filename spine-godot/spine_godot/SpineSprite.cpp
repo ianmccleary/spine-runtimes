@@ -733,6 +733,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 		spine::Slot *slot = skeleton->getDrawOrder()[i];
 		spine::Attachment *attachment = slot->getAttachment();
 		SpineMesh3D *mesh_instance = mesh_instances[i];
+		mesh_instance->set_visible(false);
 		mesh_instance->renderer_object = nullptr;
 
 		if (!attachment)
@@ -925,6 +926,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				mesh_instance->set_material(statics.default_materials[slot->getData().getBlendMode()]);
 			
 			mesh_instance->update_mesh();
+			mesh_instance->set_visible(true);
 			mesh_instance->set_position(Vector3(0.f, 0.f, z_offset * slot_count));
 			++slot_count;
 		}
