@@ -176,11 +176,11 @@ public:
 	// External feature functions
 	void apply_world_transform_2d(const Variant &o);
 
-	Transform2D get_transform();
+	Transform3D get_transform();
 
-	void set_transform(Transform2D transform);
+	void set_transform(Transform3D transform);
 
-	Transform2D get_global_transform();
+	Transform3D get_global_transform();
 
-	void set_global_transform(Transform2D trans);
+	void set_global_transform(Transform3D trans);
 };

@@ -436,20 +436,24 @@ void SpineBone::set_inherit(SpineConstant::Inherit inherit) {
 	get_spine_object()->setInherit((spine::Inherit) inherit);
 }
 
-Transform2D SpineBone::get_transform() {
-	SPINE_CHECK(get_spine_object(), Transform2D())
-	Transform2D transform;
-	transform.rotate(spine::MathUtil::Deg_Rad * get_rotation());
-	transform.scale(Size2(get_scale_x(), get_scale_y()));
-	transform.set_origin(Vector2(get_x(), get_y()));
+#define ROTATION_AXIS Vector3(0.f, 0.f, 1.f)
+
+Transform3D SpineBone::get_transform() {
+	SPINE_CHECK(get_spine_object(), Transform3D())
+	Transform3D transform;
+	transform.rotate(ROTATION_AXIS, spine::MathUtil::Deg_Rad * get_rotation());
+	transform.scale(Vector3(get_scale_x(), get_scale_y(), 0.f));
+	transform.set_origin(Vector3(get_x(), get_y(), 0.f));
 	return transform;
 }
 
-void SpineBone::set_transform(Transform2D transform) {
+void SpineBone::set_transform(Transform3D transform) {
 	SPINE_CHECK(get_spine_object(), )
-	Vector2 position = transform.get_origin();
-	float rotation = spine::MathUtil::Rad_Deg * transform.get_rotation();
-	Vector2 scale = transform.get_scale();
+	Vector3 position = transform.get_origin();
+	float rotation;
+	transform.get_basis().get_rotation_axis_angle(ROTATION_AXIS, rotation);
+	rotation *= spine::MathUtil::Rad_Deg;
+	Vector3 scale = transform.get_basis().get_scale();
 
 	set_x(position.x);
 	set_y(position.y);
@@ -460,32 +464,34 @@ void SpineBone::set_transform(Transform2D transform) {
 	get_spine_owner()->set_modified_bones();
 }
 
-Transform2D SpineBone::get_global_transform() {
-	SPINE_CHECK(get_spine_object(), Transform2D())
+Transform3D SpineBone::get_global_transform() {
+	SPINE_CHECK(get_spine_object(), Transform3D())
 	if (!get_spine_owner()) return get_transform();
 	if (!get_spine_owner()->is_visible_in_tree()) return get_transform();
-	Transform2D local;
-	local.rotate(spine::MathUtil::Deg_Rad * get_world_rotation_x());
-	local.scale(Vector2(get_world_scale_x(), get_world_scale_y()));
-	local.set_origin(Vector2(get_world_x(), get_world_y()));
+	Transform3D local;
+	local.rotate(ROTATION_AXIS, spine::MathUtil::Deg_Rad * get_world_rotation_x());
+	local.scale(Vector3(get_world_scale_x(), get_world_scale_y(), 1.f));
+	local.set_origin(Vector3(get_world_x(), get_world_y(), 0.f));
 	return get_spine_owner()->get_global_transform() * local;
 }
 
-void SpineBone::set_global_transform(Transform2D transform) {
+void SpineBone::set_global_transform(Transform3D transform) {
 	SPINE_CHECK(get_spine_object(), )
 	if (!get_spine_owner()) set_transform(transform);
 	if (!get_spine_owner()->is_visible_in_tree()) return;
 
 	auto bone = get_spine_object();
 
-	Transform2D inverse_sprite_transform = get_spine_owner()->get_global_transform().affine_inverse();
+	Transform3D inverse_sprite_transform = get_spine_owner()->get_global_transform().affine_inverse();
 	transform = inverse_sprite_transform * transform;
-	Vector2 position = transform.get_origin();
-	float rotation = spine::MathUtil::Rad_Deg * transform.get_rotation();
-	Vector2 scale = transform.get_scale();
-	Vector2 local_position = position;
+	Vector3 position = transform.get_origin();
+	float rotation = .0f;
+	transform.get_basis().get_rotation_axis_angle(ROTATION_AXIS, rotation);
+	rotation *= spine::MathUtil::Rad_Deg;
+	Vector3 scale = transform.get_basis().get_scale();
+	Vector3 local_position = position;
 	float local_rotation = bone->worldToLocalRotation(rotation) - 180;
-	Vector2 local_scale = scale;
+	Vector3 local_scale = scale;
 	spine::Bone *parent = bone->getParent();
 	if (parent) {
 		parent->worldToLocal(local_position.x, local_position.y, local_position.x, local_position.y);

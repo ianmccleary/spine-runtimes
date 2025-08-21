@@ -121,7 +121,7 @@ void register_spine_godot_types() {
 	GDREGISTER_CLASS(SpineSkeletonDataResource);
 	GDREGISTER_CLASS(SpineAnimationMix);
 	GDREGISTER_CLASS(SpineSprite);
-	GDREGISTER_CLASS(SpineMesh2D);
+	GDREGISTER_CLASS(SpineMesh3D);
 	GDREGISTER_CLASS(SpineSkeleton);
 	GDREGISTER_CLASS(SpineAnimationState);
 	GDREGISTER_CLASS(SpineAnimation);

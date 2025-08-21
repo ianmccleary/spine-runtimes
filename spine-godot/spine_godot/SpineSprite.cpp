@@ -36,7 +36,6 @@
 
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/classes/engine.hpp>
-#include <godot_cpp/classes/geometry2d.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
@@ -44,6 +43,7 @@
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
+#include <godot_cpp/classes/standard_material3d.hpp>
 #if TOOLS_ENABLED
 #include <godot_cpp/classes/editor_plugin.hpp>
 #include <godot_cpp/classes/font.hpp>
@@ -56,7 +56,7 @@ private:
 	static SpineSpriteStatics *_instance;
 
 public:
-	Ref<CanvasItemMaterial> default_materials[4] = {};
+	Ref<StandardMaterial3D> default_materials[4] = {};
 	int sprite_count;
 	spine::Vector<unsigned short> quad_indices;
 	spine::Vector<float> scratch_vertices;
@@ -72,20 +72,20 @@ public:
 		quad_indices[5] = 0;
 		scratch_vertices.ensureCapacity(1200);
 
-		Ref<CanvasItemMaterial> material_normal(memnew(CanvasItemMaterial));
-		material_normal->set_blend_mode(CanvasItemMaterial::BLEND_MODE_MIX);
+		Ref<StandardMaterial3D> material_normal(memnew(StandardMaterial3D));
+		material_normal->set_blend_mode(BaseMaterial3D::BLEND_MODE_MIX);
 		default_materials[spine::BlendMode_Normal] = material_normal;
 
-		Ref<CanvasItemMaterial> material_additive(memnew(CanvasItemMaterial));
-		material_additive->set_blend_mode(CanvasItemMaterial::BLEND_MODE_ADD);
+		Ref<StandardMaterial3D> material_additive(memnew(StandardMaterial3D));
+		material_additive->set_blend_mode(BaseMaterial3D::BLEND_MODE_ADD);
 		default_materials[spine::BlendMode_Additive] = material_additive;
 
-		Ref<CanvasItemMaterial> material_multiply(memnew(CanvasItemMaterial));
-		material_multiply->set_blend_mode(CanvasItemMaterial::BLEND_MODE_MUL);
+		Ref<StandardMaterial3D> material_multiply(memnew(StandardMaterial3D));
+		material_multiply->set_blend_mode(BaseMaterial3D::BLEND_MODE_MUL);
 		default_materials[spine::BlendMode_Multiply] = material_multiply;
 
-		Ref<CanvasItemMaterial> material_screen(memnew(CanvasItemMaterial));
-		material_screen->set_blend_mode(CanvasItemMaterial::BLEND_MODE_SUB);
+		Ref<StandardMaterial3D> material_screen(memnew(StandardMaterial3D));
+		material_screen->set_blend_mode(BaseMaterial3D::BLEND_MODE_SUB);
 		default_materials[spine::BlendMode_Screen] = material_screen;
 	}
 
@@ -106,52 +106,44 @@ public:
 
 SpineSpriteStatics *SpineSpriteStatics::_instance = nullptr;
 
-static void
-clear_triangles(SpineMesh2D *mesh_instance) {
-	RenderingServer::get_singleton()->canvas_item_clear(mesh_instance->get_canvas_item());
+SpineMesh3D::SpineMesh3D()
+	: renderer_object(nullptr),
+	indices_changed(true),
+	num_vertices(0),
+	num_indices(0),
+	vertex_stride(0),
+	normal_tangent_stride(0),
+	attribute_stride(0)
+{
+	if (RS::get_singleton())
+	{
+		mesh = RS::get_singleton()->mesh_create();
+		set_base(mesh);
+	}
+};
+
+SpineMesh3D::~SpineMesh3D() {
+	if (mesh.is_valid()) {
+		RS::get_singleton()->free_rid(mesh);
+	}
 }
 
-static void add_triangles(SpineMesh2D *mesh_instance,
-						  const PackedVector2Array &vertices,
-						  const PackedVector2Array &uvs,
-						  const PackedColorArray &colors,
-						  const PackedInt32Array &indices,
-						  SpineRendererObject *renderer_object) {
-	mesh_instance->update_mesh(vertices, uvs, colors, indices, renderer_object);
-}
-
-void SpineMesh2D::_notification(int what) {
+void SpineMesh3D::_notification(int what) {
 	switch (what) {
 		case NOTIFICATION_READY: {
 			set_process_internal(true);
 			break;
 		}
-		case NOTIFICATION_INTERNAL_PROCESS:
-			queue_redraw();
-			break;
-		case NOTIFICATION_DRAW:
-			clear_triangles(this);
-			if (renderer_object)
-				add_triangles(this, vertices, uvs, colors, indices, renderer_object);
-			break;
 		default:
 			break;
 	}
 }
 
-void SpineMesh2D::_bind_methods() {
+void SpineMesh3D::_bind_methods() {
 }
 
-void SpineMesh2D::update_mesh(const PackedVector2Array &vertices,
-							  const PackedVector2Array &uvs,
-							  const PackedColorArray &colors,
-							  const PackedInt32Array &indices,
-							  SpineRendererObject *renderer_object) {
-	if (!mesh.is_valid() || vertices.size() != num_vertices || indices.size() != num_indices || indices_changed) {
-		if (mesh.is_valid()) {
-			RS::get_singleton()->free_rid(mesh);
-		}
-		mesh = RS::get_singleton()->mesh_create();
+void SpineMesh3D::update_mesh(SpineRendererObject *renderer_object) {
+	if (vertices.size() != num_vertices || indices.size() != num_indices || indices_changed) {
 		Array arrays;
 		arrays.resize(Mesh::ARRAY_MAX);
 		arrays[Mesh::ARRAY_VERTEX] = vertices;
@@ -199,8 +191,15 @@ void SpineMesh2D::update_mesh(const PackedVector2Array &vertices,
 		RS::get_singleton()->mesh_surface_update_attribute_region(mesh, 0, 0, attribute_buffer);
 		RS::get_singleton()->mesh_set_custom_aabb(mesh, aabb_new);
 	}
+}
 
-	RenderingServer::get_singleton()->canvas_item_add_mesh(this->get_canvas_item(), mesh, Transform2D(), Color(1, 1, 1, 1), renderer_object->canvas_texture->get_rid());
+void SpineMesh3D::set_material(Ref<Material> material)
+{
+	if (mesh.is_valid())
+	{
+		const auto material_rid = material.is_valid() ? material->get_rid() : RID();
+		RS::get_singleton()->mesh_surface_set_material(mesh, 0, material_rid);
+	}
 }
 
 void SpineSprite::clear_statics() {
@@ -232,37 +231,6 @@ void SpineSprite::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_time_scale"), &SpineSprite::get_time_scale);
 	ClassDB::bind_method(D_METHOD("set_time_scale", "v"), &SpineSprite::set_time_scale);
 
-	ClassDB::bind_method(D_METHOD("set_debug_root", "v"), &SpineSprite::set_debug_root);
-	ClassDB::bind_method(D_METHOD("get_debug_root"), &SpineSprite::get_debug_root);
-	ClassDB::bind_method(D_METHOD("set_debug_root_color", "v"), &SpineSprite::set_debug_root_color);
-	ClassDB::bind_method(D_METHOD("get_debug_root_color"), &SpineSprite::get_debug_root_color);
-	ClassDB::bind_method(D_METHOD("set_debug_bones", "v"), &SpineSprite::set_debug_bones);
-	ClassDB::bind_method(D_METHOD("get_debug_bones"), &SpineSprite::get_debug_bones);
-	ClassDB::bind_method(D_METHOD("set_debug_bones_color", "v"), &SpineSprite::set_debug_bones_color);
-	ClassDB::bind_method(D_METHOD("get_debug_bones_color"), &SpineSprite::get_debug_bones_color);
-	ClassDB::bind_method(D_METHOD("set_debug_bones_thickness", "v"), &SpineSprite::set_debug_bones_thickness);
-	ClassDB::bind_method(D_METHOD("get_debug_bones_thickness"), &SpineSprite::get_debug_bones_thickness);
-	ClassDB::bind_method(D_METHOD("set_debug_regions", "v"), &SpineSprite::set_debug_regions);
-	ClassDB::bind_method(D_METHOD("get_debug_regions"), &SpineSprite::get_debug_regions);
-	ClassDB::bind_method(D_METHOD("set_debug_regions_color", "v"), &SpineSprite::set_debug_regions_color);
-	ClassDB::bind_method(D_METHOD("get_debug_regions_color"), &SpineSprite::get_debug_regions_color);
-	ClassDB::bind_method(D_METHOD("set_debug_meshes", "v"), &SpineSprite::set_debug_meshes);
-	ClassDB::bind_method(D_METHOD("get_debug_meshes"), &SpineSprite::get_debug_meshes);
-	ClassDB::bind_method(D_METHOD("set_debug_meshes_color", "v"), &SpineSprite::set_debug_meshes_color);
-	ClassDB::bind_method(D_METHOD("get_debug_meshes_color"), &SpineSprite::get_debug_meshes_color);
-	ClassDB::bind_method(D_METHOD("set_debug_bounding_boxes", "v"), &SpineSprite::set_debug_bounding_boxes);
-	ClassDB::bind_method(D_METHOD("get_debug_bounding_boxes"), &SpineSprite::get_debug_bounding_boxes);
-	ClassDB::bind_method(D_METHOD("set_debug_bounding_boxes_color", "v"), &SpineSprite::set_debug_bounding_boxes_color);
-	ClassDB::bind_method(D_METHOD("get_debug_bounding_boxes_color"), &SpineSprite::get_debug_bounding_boxes_color);
-	ClassDB::bind_method(D_METHOD("set_debug_paths", "v"), &SpineSprite::set_debug_paths);
-	ClassDB::bind_method(D_METHOD("get_debug_paths"), &SpineSprite::get_debug_paths);
-	ClassDB::bind_method(D_METHOD("set_debug_paths_color", "v"), &SpineSprite::set_debug_paths_color);
-	ClassDB::bind_method(D_METHOD("get_debug_paths_color"), &SpineSprite::get_debug_paths_color);
-	ClassDB::bind_method(D_METHOD("set_debug_clipping", "v"), &SpineSprite::set_debug_clipping);
-	ClassDB::bind_method(D_METHOD("get_debug_clipping"), &SpineSprite::get_debug_clipping);
-	ClassDB::bind_method(D_METHOD("set_debug_clipping_color", "v"), &SpineSprite::set_debug_clipping_color);
-	ClassDB::bind_method(D_METHOD("get_debug_clipping_color"), &SpineSprite::get_debug_clipping_color);
-
 	ClassDB::bind_method(D_METHOD("update_skeleton", "delta"), &SpineSprite::update_skeleton);
 	ClassDB::bind_method(D_METHOD("new_skin", "name"), &SpineSprite::new_skin);
 
@@ -286,23 +254,6 @@ void SpineSprite::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "multiply_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_multiply_material", "get_multiply_material");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "screen_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_screen_material", "get_screen_material");
 
-	ADD_GROUP("Debug", "");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "root"), "set_debug_root", "get_debug_root");
-	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "root_color"), "set_debug_root_color", "get_debug_root_color");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "bones"), "set_debug_bones", "get_debug_bones");
-	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "bones_color"), "set_debug_bones_color", "get_debug_bones_color");
-	ADD_PROPERTY(PropertyInfo(VARIANT_FLOAT, "bones_thickness"), "set_debug_bones_thickness", "get_debug_bones_thickness");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "regions"), "set_debug_regions", "get_debug_regions");
-	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "regions_color"), "set_debug_regions_color", "get_debug_regions_color");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "meshes"), "set_debug_meshes", "get_debug_meshes");
-	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "meshes_color"), "set_debug_meshes_color", "get_debug_meshes_color");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "bounding_boxes"), "set_debug_bounding_boxes", "get_debug_bounding_boxes");
-	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "bounding_boxes_color"), "set_debug_bounding_boxes_color", "get_debug_bounding_boxes_color");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "paths"), "set_debug_paths", "get_debug_paths");
-	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "paths_color"), "set_debug_paths_color", "get_debug_paths_color");
-	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "clipping"), "set_debug_clipping", "get_debug_clipping");
-	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "paths_clipping"), "set_debug_clipping_color", "get_debug_clipping_color");
-
 	ADD_GROUP("Preview", "");
 	// Filled in in _get_property_list()
 }
@@ -310,24 +261,6 @@ void SpineSprite::_bind_methods() {
 SpineSprite::SpineSprite() : update_mode(SpineConstant::UpdateMode_Process), time_scale(1.0), preview_skin("Default"), preview_animation("-- Empty --"), preview_frame(false), preview_time(0), skeleton_clipper(nullptr), modified_bones(false) {
 	skeleton_clipper = new spine::SkeletonClipping();
 	auto statics = SpineSpriteStatics::instance();
-
-	// Default debug settings
-	debug_root = false;
-	debug_root_color = Color(1, 1, 1, 0.5);
-	debug_bones = false;
-	debug_bones_color = Color(1, 1, 0, 0.5);
-	debug_bones_thickness = 5;
-	debug_regions = false;
-	debug_regions_color = Color(0, 0, 1, 0.5);
-	debug_meshes = false;
-	debug_meshes_color = Color(0, 0, 1, 0.5);
-	debug_bounding_boxes = false;
-	debug_bounding_boxes_color = Color(0, 1, 0, 0.5);
-	debug_paths = false;
-	debug_paths_color = Color::hex(0xff7f0077);
-	debug_clipping = false;
-	debug_clipping_color = Color(0.8, 0, 0, 0.8);
-
 	statics.sprite_count++;
 }
 
@@ -387,11 +320,9 @@ void SpineSprite::generate_meshes_for_slots(Ref<SpineSkeleton> skeleton_ref) {
 	auto skeleton = skeleton_ref->get_spine_object();
 	auto statics = SpineSpriteStatics::instance();
 	for (int i = 0, n = (int) skeleton->getSlots().size(); i < n; i++) {
-		auto mesh_instance = memnew(SpineMesh2D);
-		mesh_instance->set_position(Vector2(0, 0));
+		auto mesh_instance = memnew(SpineMesh3D);
+		mesh_instance->set_position(Vector3(0, 0, 0));
 		mesh_instance->set_material(statics.default_materials[spine::BlendMode_Normal]);
-		// Needed so that debug drawables are rendered in front of attachments
-		mesh_instance->set_draw_behind_parent(true);
 		add_child(mesh_instance);
 		mesh_instances.push_back(mesh_instance);
 		slot_nodes.add(spine::Vector<SpineSlotNode *>());
@@ -460,10 +391,6 @@ void SpineSprite::_notification(int what) {
 		case NOTIFICATION_INTERNAL_PHYSICS_PROCESS: {
 			if (update_mode == SpineConstant::UpdateMode_Physics)
 				update_skeleton(get_physics_process_delta_time());
-			break;
-		}
-		case NOTIFICATION_DRAW: {
-			draw();
 			break;
 		}
 		default:
@@ -613,7 +540,6 @@ void SpineSprite::update_skeleton(float delta) {
 	if (modified_bones) skeleton->update_world_transform(SpineConstant::Physics_Update);
 	sort_slot_nodes();
 	update_meshes(skeleton);
-	queue_redraw();
 }
 
 void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref) {
@@ -622,7 +548,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref) {
 	for (int i = 0, n = (int) skeleton->getSlots().size(); i < n; ++i) {
 		spine::Slot *slot = skeleton->getDrawOrder()[i];
 		spine::Attachment *attachment = slot->getAttachment();
-		SpineMesh2D *mesh_instance = mesh_instances[i];
+		SpineMesh3D *mesh_instance = mesh_instances[i];
 		mesh_instance->renderer_object = nullptr;
 
 		if (!attachment) {
@@ -692,7 +618,6 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref) {
 		}
 
 		if (indices->size() > 0) {
-			mesh_instance->set_light_mask(get_light_mask());
 			size_t num_vertices = vertices->size() / 2;
 			mesh_instance->vertices.resize((int) num_vertices);
 			memcpy(mesh_instance->vertices.ptrw(), vertices->buffer(), num_vertices * 2 * sizeof(float));
@@ -771,7 +696,8 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref) {
 			}
 
 			// Set the custom material, or the default material
-			if (custom_material.is_valid()) mesh_instance->set_material(custom_material);
+			if (custom_material.is_valid())
+				mesh_instance->set_material(custom_material);
 			else
 				mesh_instance->set_material(statics.default_materials[slot->getData().getBlendMode()]);
 		}
@@ -796,237 +722,6 @@ void createLinesFromMesh(PackedVector2Array &scratch_points, spine::Vector<unsig
 		scratch_points.push_back(v3);
 		scratch_points.push_back(v1);
 	}
-}
-
-void SpineSprite::draw() {
-	if (!animation_state.is_valid() && !skeleton.is_valid()) return;
-	if (!Engine::get_singleton()->is_editor_hint() && !get_tree()->is_debugging_collisions_hint()) return;
-
-	auto statics = SpineSpriteStatics::instance();
-
-	RS::get_singleton()->canvas_item_clear(this->get_canvas_item());
-
-	auto mouse_position = get_local_mouse_position();
-	spine::Slot *hovered_slot = nullptr;
-
-	if (debug_regions) {
-		draw_set_transform(Vector2(0, 0), 0, Vector2(1, 1));
-		auto &draw_order = skeleton->get_spine_object()->getDrawOrder();
-		for (int i = 0; i < (int) draw_order.size(); i++) {
-			auto *slot = draw_order[i];
-			if (!slot->getBone().isActive()) continue;
-			auto *attachment = slot->getAttachment();
-			if (!attachment) continue;
-			if (!attachment->getRTTI().isExactly(spine::RegionAttachment::rtti)) continue;
-			auto *region = (spine::RegionAttachment *) attachment;
-			auto *vertices = &statics.scratch_vertices;
-			vertices->setSize(8, 0);
-			region->computeWorldVertices(*slot, *vertices, 0);
-
-			// Render triangles.
-			createLinesFromMesh(statics.scratch_points, statics.quad_indices, vertices);
-			draw_polyline(statics.scratch_points, debug_regions_color);
-
-			// Render hull.
-			statics.scratch_points.resize(0);
-			for (int i = 0, j = 0; i < 4; i++, j += 2) {
-				float x = vertices->buffer()[j];
-				float y = vertices->buffer()[j + 1];
-				statics.scratch_points.push_back(Vector2(x, y));
-			}
-			statics.scratch_points.push_back(Vector2(vertices->buffer()[0], vertices->buffer()[1]));
-
-			Color color = debug_regions_color;
-			if (GEOMETRY2D::get_singleton()->is_point_in_polygon(mouse_position, statics.scratch_points)) {
-				hovered_slot = slot;
-				color = Color(1, 1, 1, 1);
-			}
-			statics.scratch_points.push_back(Vector2(vertices->buffer()[0], vertices->buffer()[1]));
-			draw_polyline(statics.scratch_points, color, 2);
-		}
-	}
-
-	if (debug_meshes) {
-		draw_set_transform(Vector2(0, 0), 0, Vector2(1, 1));
-		auto &draw_order = skeleton->get_spine_object()->getDrawOrder();
-		for (int i = 0; i < (int) draw_order.size(); i++) {
-			auto *slot = draw_order[i];
-			if (!slot->getBone().isActive()) continue;
-			auto *attachment = slot->getAttachment();
-			if (!attachment) continue;
-			if (!attachment->getRTTI().isExactly(spine::MeshAttachment::rtti)) continue;
-			auto *mesh = (spine::MeshAttachment *) attachment;
-			auto *vertices = &statics.scratch_vertices;
-			vertices->setSize(mesh->getWorldVerticesLength(), 0);
-			mesh->computeWorldVertices(*slot, *vertices);
-
-			// Render triangles.
-			createLinesFromMesh(statics.scratch_points, mesh->getTriangles(), vertices);
-			draw_polyline(statics.scratch_points, debug_meshes_color);
-
-			// Render hull
-			statics.scratch_points.resize(0);
-			for (int i = 0, j = 0; i < mesh->getHullLength(); i++, j += 2) {
-				float x = vertices->buffer()[j];
-				float y = vertices->buffer()[j + 1];
-				statics.scratch_points.push_back(Vector2(x, y));
-			}
-
-			Color color = debug_meshes_color;
-			if (GEOMETRY2D::get_singleton()->is_point_in_polygon(mouse_position, statics.scratch_points)) {
-				hovered_slot = slot;
-				color = Color(1, 1, 1, 1);
-			}
-			statics.scratch_points.push_back(Vector2(vertices->buffer()[0], vertices->buffer()[1]));
-			draw_polyline(statics.scratch_points, color, 2);
-		}
-	}
-
-	if (debug_bounding_boxes) {
-		draw_set_transform(Vector2(0, 0), 0, Vector2(1, 1));
-		auto &draw_order = skeleton->get_spine_object()->getDrawOrder();
-		for (int i = 0; i < (int) draw_order.size(); i++) {
-			auto *slot = draw_order[i];
-			if (!slot->getBone().isActive()) continue;
-			auto *attachment = slot->getAttachment();
-			if (!attachment) continue;
-			if (!attachment->getRTTI().isExactly(spine::BoundingBoxAttachment::rtti)) continue;
-			auto *bounding_box = (spine::BoundingBoxAttachment *) attachment;
-			auto *vertices = &statics.scratch_vertices;
-			vertices->setSize(bounding_box->getWorldVerticesLength(), 0);
-			bounding_box->computeWorldVertices(*slot, *vertices);
-			size_t num_vertices = vertices->size() / 2;
-			statics.scratch_points.resize((int) num_vertices);
-			memcpy(statics.scratch_points.ptrw(), vertices->buffer(), num_vertices * 2 * sizeof(float));
-			statics.scratch_points.push_back(Vector2(vertices->buffer()[0], vertices->buffer()[1]));
-			draw_polyline(statics.scratch_points, debug_bounding_boxes_color, 2);
-		}
-	}
-
-	if (debug_clipping) {
-		draw_set_transform(Vector2(0, 0), 0, Vector2(1, 1));
-		auto &draw_order = skeleton->get_spine_object()->getDrawOrder();
-		for (int i = 0; i < (int) draw_order.size(); i++) {
-			auto *slot = draw_order[i];
-			if (!slot->getBone().isActive()) continue;
-			auto *attachment = slot->getAttachment();
-			if (!attachment) continue;
-			if (!attachment->getRTTI().isExactly(spine::ClippingAttachment::rtti)) continue;
-			auto *clipping = (spine::ClippingAttachment *) attachment;
-			auto *vertices = &statics.scratch_vertices;
-			vertices->setSize(clipping->getWorldVerticesLength(), 0);
-			clipping->computeWorldVertices(*slot, *vertices);
-			size_t num_vertices = vertices->size() / 2;
-			statics.scratch_points.resize((int) num_vertices);
-			memcpy(statics.scratch_points.ptrw(), vertices->buffer(), num_vertices * 2 * sizeof(float));
-			statics.scratch_points.push_back(Vector2(vertices->buffer()[0], vertices->buffer()[1]));
-			draw_polyline(statics.scratch_points, debug_clipping_color, 2);
-		}
-	}
-
-
-	spine::Bone *hovered_bone = nullptr;
-	if (debug_root) {
-		auto bone = skeleton->get_spine_object()->getRootBone();
-		draw_bone(bone, debug_root_color);
-
-		float bone_length = bone->getData().getLength();
-		if (bone_length == 0) bone_length = debug_bones_thickness * 2;
-
-		statics.scratch_points.resize(5);
-		statics.scratch_points.set(0, Vector2(-debug_bones_thickness, 0));
-		statics.scratch_points.set(1, Vector2(0, debug_bones_thickness));
-		statics.scratch_points.set(2, Vector2(bone_length, 0));
-		statics.scratch_points.set(3, Vector2(0, -debug_bones_thickness));
-		statics.scratch_points.set(4, Vector2(-debug_bones_thickness, 0));
-		Transform2D bone_transform(spine::MathUtil::Deg_Rad * bone->getWorldRotationX(), Vector2(bone->getWorldX(), bone->getWorldY()));
-		bone_transform.scale_basis(Vector2(bone->getWorldScaleX(), bone->getWorldScaleY()));
-		auto mouse_local_position = bone_transform.affine_inverse().xform(mouse_position);
-		if (GEOMETRY2D::get_singleton()->is_point_in_polygon(mouse_local_position, statics.scratch_points)) {
-			hovered_bone = bone;
-		}
-	}
-
-	if (debug_bones) {
-		auto &bones = skeleton->get_spine_object()->getBones();
-		for (int i = 0; i < (int) bones.size(); i++) {
-			auto *bone = bones[i];
-			if (!bone->isActive()) continue;
-			draw_bone(bone, debug_bones_color);
-
-			float bone_length = bone->getData().getLength();
-			if (bone_length == 0) bone_length = debug_bones_thickness * 2;
-
-			statics.scratch_points.resize(5);
-			statics.scratch_points.set(0, Vector2(-debug_bones_thickness, 0));
-			statics.scratch_points.set(1, Vector2(0, debug_bones_thickness));
-			statics.scratch_points.set(2, Vector2(bone_length, 0));
-			statics.scratch_points.set(3, Vector2(0, -debug_bones_thickness));
-			statics.scratch_points.set(4, Vector2(-debug_bones_thickness, 0));
-			Transform2D bone_transform(spine::MathUtil::Deg_Rad * bone->getWorldRotationX(), Vector2(bone->getWorldX(), bone->getWorldY()));
-			bone_transform.scale_basis(Vector2(bone->getWorldScaleX(), bone->getWorldScaleY()));
-			auto mouse_local_position = bone_transform.affine_inverse().xform(mouse_position);
-			if (GEOMETRY2D::get_singleton()->is_point_in_polygon(mouse_local_position, statics.scratch_points)) {
-				hovered_bone = bone;
-			}
-		}
-	}
-
-#if TOOLS_ENABLED
-	float editor_scale = 1.0;
-	if (Engine::get_singleton()->is_editor_hint()) editor_scale = EditorInterface::get_singleton()->get_editor_scale();
-
-	float inverse_zoom = 1 / get_viewport()->get_global_canvas_transform().get_scale().x * editor_scale;
-	Vector<String> hover_text_lines;
-	if (hovered_slot) {
-		String name;
-		name.parse_utf8(hovered_slot->getData().getName().buffer());
-		hover_text_lines.push_back(String("Slot: ") + name);
-	}
-
-	if (hovered_bone) {
-		float thickness = debug_bones_thickness;
-		debug_bones_thickness *= 1.1;
-		draw_bone(hovered_bone, Color(debug_bones_color.r, debug_bones_color.g, debug_bones_color.b, 1));
-		debug_bones_thickness = thickness;
-		String name;
-		name.parse_utf8(hovered_bone->getData().getName().buffer());
-		hover_text_lines.push_back(String("Bone: ") + name);
-	}
-
-	auto global_scale = get_global_scale();
-	draw_set_transform(mouse_position + Vector2(20, 0), -get_global_rotation(), Vector2(inverse_zoom * (1 / global_scale.x), inverse_zoom * (1 / global_scale.y)));
-
-	Ref<Font> default_font;
-	auto control = memnew(Control);
-	default_font = control->get_theme_default_font();
-	memdelete(control);
-
-	// FIXME possibly wrong
-	float line_height = default_font->get_height() + default_font->get_descent();
-	float rect_width = 0;
-	for (int i = 0; i < hover_text_lines.size(); i++) {
-		rect_width = MAX(rect_width, default_font->get_string_size(hover_text_lines[i]).x);
-	}
-
-	Rect2 background_rect(0, -default_font->get_height() - 5, rect_width + 20, line_height * hover_text_lines.size() + 10);
-	if (hover_text_lines.size() > 0) draw_rect(background_rect, Color(0, 0, 0, 0.8));
-	for (int i = 0; i < hover_text_lines.size(); i++) {
-		draw_string(default_font, Vector2(10, 0 + i * default_font->get_height()), hover_text_lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 1));
-	}
-#endif
-}
-
-void SpineSprite::draw_bone(spine::Bone *bone, const Color &color) {
-	draw_set_transform(Vector2(bone->getWorldX(), bone->getWorldY()), spine::MathUtil::Deg_Rad * bone->getWorldRotationX(), Vector2(bone->getWorldScaleX(), bone->getWorldScaleY()));
-	float bone_length = bone->getData().getLength();
-	if (bone_length == 0) bone_length = debug_bones_thickness * 2;
-	PackedVector2Array points;
-	points.push_back(Vector2(-debug_bones_thickness, 0));
-	points.push_back(Vector2(0, debug_bones_thickness));
-	points.push_back(Vector2(bone_length, 0));
-	points.push_back(Vector2(0, -debug_bones_thickness));
-	draw_colored_polygon(points, color);
 }
 
 void SpineSprite::callback(spine::AnimationState *state, spine::EventType type, spine::TrackEntry *entry, spine::Event *event) {
@@ -1061,7 +756,7 @@ void SpineSprite::callback(spine::AnimationState *state, spine::EventType type, 
 	}
 }
 
-Transform2D SpineSprite::get_global_bone_transform(const String &bone_name) {
+Transform3D SpineSprite::get_global_bone_transform(const String &bone_name) {
 	if (!animation_state.is_valid() && !skeleton.is_valid()) return get_global_transform();
 	auto bone = skeleton->find_bone(bone_name);
 	if (!bone.is_valid()) {
@@ -1070,7 +765,7 @@ Transform2D SpineSprite::get_global_bone_transform(const String &bone_name) {
 	return bone->get_global_transform();
 }
 
-void SpineSprite::set_global_bone_transform(const String &bone_name, Transform2D transform) {
+void SpineSprite::set_global_bone_transform(const String &bone_name, Transform3D transform) {
 	if (!animation_state.is_valid() && !skeleton.is_valid()) return;
 	auto bone = skeleton->find_bone(bone_name);
 	if (!bone.is_valid()) return;

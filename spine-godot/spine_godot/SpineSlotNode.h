@@ -31,14 +31,10 @@
 
 #include "SpineCommon.h"
 #include "SpineSprite.h"
-#ifdef SPINE_GODOT_EXTENSION
-#include <godot_cpp/classes/node2d.hpp>
-#else
-#include "scene/2d/node_2d.h"
-#endif
+#include <godot_cpp/classes/node3d.hpp>
 
-class SpineSlotNode : public Node2D {
-	GDCLASS(SpineSlotNode, Node2D)
+class SpineSlotNode : public Node3D {
+	GDCLASS(SpineSlotNode, Node3D)
 
 protected:
 	String slot_name;
