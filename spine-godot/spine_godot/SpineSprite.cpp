@@ -737,9 +737,6 @@ void SpineSprite::update_skeleton(float delta)
 
 void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 {
-	// In 3D, use Vector3 rather than Vector2, so use stride of 3
-	constexpr size_t VERTEX_SIZE = 2;
-
 	auto statics = SpineSpriteStatics::instance();
 	spine::Skeleton *skeleton = skeleton_ref->get_spine_object();
 	for (int i = 0, n = (int) skeleton->getSlots().size(); i < n; ++i)
