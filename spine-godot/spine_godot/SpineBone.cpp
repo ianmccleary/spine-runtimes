@@ -441,7 +441,8 @@ void SpineBone::set_inherit(SpineConstant::Inherit inherit) {
 Transform3D SpineBone::get_transform() {
 	SPINE_CHECK(get_spine_object(), Transform3D())
 	Transform3D transform;
-	transform.rotate(ROTATION_AXIS, spine::MathUtil::Deg_Rad * get_rotation());
+	Vector3 axis = ROTATION_AXIS;
+	transform.rotate(axis, spine::MathUtil::Deg_Rad * get_rotation());
 	transform.scale(Vector3(get_scale_x(), get_scale_y(), 0.f));
 	transform.set_origin(Vector3(get_x(), get_y(), 0.f));
 	return transform;
@@ -451,7 +452,8 @@ void SpineBone::set_transform(Transform3D transform) {
 	SPINE_CHECK(get_spine_object(), )
 	Vector3 position = transform.get_origin();
 	float rotation;
-	transform.get_basis().get_rotation_axis_angle(ROTATION_AXIS, rotation);
+	Vector3 axis = ROTATION_AXIS;
+	transform.get_basis().get_rotation_axis_angle(axis, rotation);
 	rotation *= spine::MathUtil::Rad_Deg;
 	Vector3 scale = transform.get_basis().get_scale();
 
@@ -469,7 +471,8 @@ Transform3D SpineBone::get_global_transform() {
 	if (!get_spine_owner()) return get_transform();
 	if (!get_spine_owner()->is_visible_in_tree()) return get_transform();
 	Transform3D local;
-	local.rotate(ROTATION_AXIS, spine::MathUtil::Deg_Rad * get_world_rotation_x());
+	Vector3 axis = ROTATION_AXIS;
+	local.rotate(axis, spine::MathUtil::Deg_Rad * get_world_rotation_x());
 	local.scale(Vector3(get_world_scale_x(), get_world_scale_y(), 1.f));
 	local.set_origin(Vector3(get_world_x(), get_world_y(), 0.f));
 	return get_spine_owner()->get_global_transform() * local;
@@ -486,7 +489,8 @@ void SpineBone::set_global_transform(Transform3D transform) {
 	transform = inverse_sprite_transform * transform;
 	Vector3 position = transform.get_origin();
 	float rotation = .0f;
-	transform.get_basis().get_rotation_axis_angle(ROTATION_AXIS, rotation);
+	Vector3 axis = ROTATION_AXIS;
+	transform.get_basis().get_rotation_axis_angle(axis, rotation);
 	rotation *= spine::MathUtil::Rad_Deg;
 	Vector3 scale = transform.get_basis().get_scale();
 	Vector3 local_position = position;
