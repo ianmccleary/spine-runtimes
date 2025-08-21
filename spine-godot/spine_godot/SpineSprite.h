@@ -102,6 +102,10 @@ protected:
 	bool preview_frame;
 	float preview_time;
 
+	bool use_sorting_offset = false;
+	float sorting_offset_multiplier = 1.f;
+	bool use_aabb_sorting = true;
+
 	spine::Vector<spine::Vector<SpineSlotNode *>> slot_nodes;
 	Vector<SpineMesh3D *> mesh_instances;
 	Ref<Material> normal_material;
@@ -174,6 +178,15 @@ public:
 	void set_z_offset(float value);
 
 	float get_z_offset();
+
+	bool get_use_aabb_sorting() const { return use_aabb_sorting; }
+	void set_use_aabb_sorting(bool value);
+
+	bool get_use_sorting_offset() const { return use_sorting_offset; }
+	void set_use_sorting_offset(bool value);
+
+	float get_sorting_offset_multiplier() const { return sorting_offset_multiplier; }
+	void set_sorting_offset_multiplier(float value) { sorting_offset_multiplier = value; }
 
 #ifndef SPINE_GODOT_EXTENSION
 // FIXME

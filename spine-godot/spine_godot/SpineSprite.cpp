@@ -293,6 +293,11 @@ void SpineMesh3D::update_mesh()
 		memcpy(&attribute_write_buffer[i * attribute_stride + surface_offsets[RS::ARRAY_COLOR]], &color, ELEMENT_SIZE_COLOR);
 		memcpy(&attribute_write_buffer[i * attribute_stride + surface_offsets[RS::ARRAY_TEX_UV]], &uv, ELEMENT_SIZE_UV);
 	}
+
+	const auto aabb_center = aabb_new.get_center();
+	aabb_new.expand_to(Vector3(aabb_center.x, aabb_center.y, -0.1f));
+	aabb_new.expand_to(Vector3(aabb_center.x, aabb_center.y, 0.1f));
+
 	RS::get_singleton()->mesh_surface_update_vertex_region(mesh, 0, 0, vertex_buffer);
 	RS::get_singleton()->mesh_surface_update_attribute_region(mesh, 0, 0, attribute_buffer);
 	RS::get_singleton()->mesh_set_custom_aabb(mesh, aabb_new);
@@ -341,6 +346,14 @@ void SpineSprite::_bind_methods()
 	ClassDB::bind_method(D_METHOD("get_z_offset"), &SpineSprite::get_z_offset);
 	ClassDB::bind_method(D_METHOD("set_z_offset", "v"), &SpineSprite::set_z_offset);
 
+	ClassDB::bind_method(D_METHOD("get_use_aabb_sorting"), &SpineSprite::get_use_aabb_sorting);
+	ClassDB::bind_method(D_METHOD("set_use_aabb_sorting", "v"), &SpineSprite::set_use_aabb_sorting);
+	
+	ClassDB::bind_method(D_METHOD("get_use_sorting_offset"), &SpineSprite::get_use_sorting_offset);
+	ClassDB::bind_method(D_METHOD("set_use_sorting_offset", "v"), &SpineSprite::set_use_sorting_offset);
+	ClassDB::bind_method(D_METHOD("get_sorting_offset_multiplier"), &SpineSprite::get_sorting_offset_multiplier);
+	ClassDB::bind_method(D_METHOD("set_sorting_offset_multiplier", "v"), &SpineSprite::set_sorting_offset_multiplier);
+
 	ClassDB::bind_method(D_METHOD("update_skeleton", "delta"), &SpineSprite::update_skeleton);
 	ClassDB::bind_method(D_METHOD("new_skin", "name"), &SpineSprite::new_skin);
 
@@ -359,6 +372,9 @@ void SpineSprite::_bind_methods()
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "skeleton_data_res", PropertyHint::PROPERTY_HINT_RESOURCE_TYPE, "SpineSkeletonDataResource"), "set_skeleton_data_res", "get_skeleton_data_res");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "update_mode", PROPERTY_HINT_ENUM, "Process,Physics,Manual"), "set_update_mode", "get_update_mode");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "z_offset"), "set_z_offset", "get_z_offset");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_aabb_sorting"), "set_use_aabb_sorting", "get_use_aabb_sorting");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_sorting_offset"), "set_use_sorting_offset", "get_use_sorting_offset");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sorting_offset_multiplier"), "set_sorting_offset_multiplier", "get_sorting_offset_multiplier");
 	ADD_GROUP("Materials", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "normal_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_normal_material", "get_normal_material");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "additive_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_additive_material", "get_additive_material");
@@ -724,8 +740,6 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 	// In 3D, use Vector3 rather than Vector2, so use stride of 3
 	constexpr size_t VERTEX_SIZE = 2;
 
-	int slot_count = 0;
-
 	auto statics = SpineSpriteStatics::instance();
 	spine::Skeleton *skeleton = skeleton_ref->get_spine_object();
 	for (int i = 0, n = (int) skeleton->getSlots().size(); i < n; ++i)
@@ -734,6 +748,11 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 		spine::Attachment *attachment = slot->getAttachment();
 		SpineMesh3D *mesh_instance = mesh_instances[i];
 		mesh_instance->set_visible(false);
+		mesh_instance->set_position(Vector3(0.f, 0.f, i * z_offset));
+		if (use_sorting_offset)
+		{
+			mesh_instance->set_sorting_offset(i * sorting_offset_multiplier);
+		}
 		mesh_instance->renderer_object = nullptr;
 
 		if (!attachment)
@@ -927,8 +946,6 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			
 			mesh_instance->update_mesh();
 			mesh_instance->set_visible(true);
-			mesh_instance->set_position(Vector3(0.f, 0.f, z_offset * slot_count));
-			++slot_count;
 		}
 		skeleton_clipper->clipEnd(*slot);
 	}
@@ -1091,6 +1108,28 @@ void SpineSprite::set_z_offset(float value)
 float SpineSprite::get_z_offset()
 {
 	return z_offset;
+}
+
+void SpineSprite::set_use_aabb_sorting(bool value)
+{
+	use_aabb_sorting = value;
+	for (const auto mesh_instance : mesh_instances)
+	{
+		mesh_instance->set_sorting_use_aabb_center(value);
+	}
+}
+
+void SpineSprite::set_use_sorting_offset(bool value)
+{
+	use_sorting_offset = value;
+	if (!value)
+	{
+		// Reset if not using sorting offset
+		for (const auto mesh_instance : mesh_instances)
+		{
+			mesh_instance->set_sorting_offset(0.f);
+		}
+	}
 }
 
 #ifndef SPINE_GODOT_EXTENSION
