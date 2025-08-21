@@ -94,6 +94,7 @@ protected:
 	Ref<SpineAnimationState> animation_state;
 	SpineConstant::UpdateMode update_mode;
 	float time_scale;
+	float z_offset;
 
 	String preview_skin;
 	String preview_animation;
@@ -168,6 +169,10 @@ public:
 	void set_time_scale(float time_scale);
 
 	float get_time_scale();
+
+	void set_z_offset(float value);
+
+	float get_z_offset();
 
 #ifndef SPINE_GODOT_EXTENSION
 // FIXME

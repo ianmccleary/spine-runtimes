@@ -275,7 +275,7 @@ void SpineMesh3D::update_mesh()
 	for (int i = 0; i < vertices.size(); i++)
 	{
 		const auto position = vertices[i];
-		const auto normal = compress_normal(Vector3(0.f, 0.f, 1.f));
+		const auto normal = compress_normal(Vector3(0.f, 0.f, -1.f));
 		const auto color = colors[i].to_abgr32();
 		const auto uv = uvs[i];
 
@@ -340,6 +340,9 @@ void SpineSprite::_bind_methods()
 	ClassDB::bind_method(D_METHOD("get_time_scale"), &SpineSprite::get_time_scale);
 	ClassDB::bind_method(D_METHOD("set_time_scale", "v"), &SpineSprite::set_time_scale);
 
+	ClassDB::bind_method(D_METHOD("get_z_offset"), &SpineSprite::get_z_offset);
+	ClassDB::bind_method(D_METHOD("set_z_offset", "v"), &SpineSprite::set_z_offset);
+
 	ClassDB::bind_method(D_METHOD("update_skeleton", "delta"), &SpineSprite::update_skeleton);
 	ClassDB::bind_method(D_METHOD("new_skin", "name"), &SpineSprite::new_skin);
 
@@ -357,6 +360,7 @@ void SpineSprite::_bind_methods()
 
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "skeleton_data_res", PropertyHint::PROPERTY_HINT_RESOURCE_TYPE, "SpineSkeletonDataResource"), "set_skeleton_data_res", "get_skeleton_data_res");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "update_mode", PROPERTY_HINT_ENUM, "Process,Physics,Manual"), "set_update_mode", "get_update_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "z_offset"), "set_z_offset", "get_z_offset");
 	ADD_GROUP("Materials", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "normal_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_normal_material", "get_normal_material");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "additive_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_additive_material", "get_additive_material");
@@ -722,6 +726,8 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 	// In 3D, use Vector3 rather than Vector2, so use stride of 3
 	constexpr size_t VERTEX_SIZE = 2;
 
+	int slot_count = 0;
+
 	auto statics = SpineSpriteStatics::instance();
 	spine::Skeleton *skeleton = skeleton_ref->get_spine_object();
 	for (int i = 0, n = (int) skeleton->getSlots().size(); i < n; ++i)
@@ -921,6 +927,8 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				mesh_instance->set_material(statics.default_materials[slot->getData().getBlendMode()]);
 			
 			mesh_instance->update_mesh();
+			mesh_instance->set_position(Vector3(0.f, 0.f, z_offset * slot_count));
+			++slot_count;
 		}
 		skeleton_clipper->clipEnd(*slot);
 	}
@@ -1073,6 +1081,16 @@ void SpineSprite::set_time_scale(float time_scale)
 float SpineSprite::get_time_scale()
 {
 	return time_scale;
+}
+
+void SpineSprite::set_z_offset(float value)
+{
+	z_offset = value;
+}
+
+float SpineSprite::get_z_offset()
+{
+	return z_offset;
 }
 
 #ifndef SPINE_GODOT_EXTENSION
