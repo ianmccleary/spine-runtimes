@@ -153,73 +153,159 @@ void SpineMesh3D::_notification(int what)
 void SpineMesh3D::_bind_methods()
 { }
 
+
+namespace
+{
+	constexpr int32_t MAX_UINT_16 = std::numeric_limits<uint16_t>::max();
+	
+	struct CompressedNormalTangent
+	{
+		uint16_t na;
+		uint16_t nb;
+		uint16_t ta;
+		uint16_t tb;
+	};
+
+	godot::Vector3 generate_tangent_from_normal(const godot::Vector3& normal)
+	{
+		return godot::Vector3(normal.z, -normal.x, normal.y).cross(normal.normalized()).normalized();
+	}
+
+	CompressedNormalTangent compress_normal(const godot::Vector3& normal)
+	{
+		CompressedNormalTangent output;
+
+		auto normal_encoded = normal.octahedron_encode();
+		output.na = static_cast<uint16_t>(godot::Math::clamp(static_cast<int32_t>(normal_encoded.x * MAX_UINT_16), 0, MAX_UINT_16));
+		output.nb =	static_cast<uint16_t>(godot::Math::clamp(static_cast<int32_t>(normal_encoded.y * MAX_UINT_16), 0, MAX_UINT_16));
+
+		auto tangent_encoded = generate_tangent_from_normal(normal).octahedron_tangent_encode(1.f);
+		output.ta = static_cast<uint16_t>(godot::Math::clamp(static_cast<int32_t>(tangent_encoded.x * MAX_UINT_16), 0, MAX_UINT_16));
+		output.tb = static_cast<uint16_t>(godot::Math::clamp(static_cast<int32_t>(tangent_encoded.y * MAX_UINT_16), 0, MAX_UINT_16));
+		if (output.ta == 0 && output.tb == MAX_UINT_16)
+		{
+			output.ta = MAX_UINT_16;
+		}
+		return output;
+	}
+}
+
+namespace
+{
+	uint64_t get_index_element_size(const uint64_t vertex_count)
+	{
+		return vertex_count <= std::numeric_limits<uint16_t>::max() ? sizeof(uint16_t) : sizeof(uint32_t);
+	}
+
+	size_t get_number_of_indices(const PackedByteArray& indices, const uint64_t vertex_count)
+	{
+		return indices.size() / get_index_element_size(vertex_count);
+	}
+}
+
 void SpineMesh3D::update_mesh()
 {
+	constexpr auto ELEMENT_SIZE_POSITION = sizeof(godot::Vector2);
+	constexpr auto ELEMENT_SIZE_NORMAL_TANGENT = sizeof(CompressedNormalTangent);
+	constexpr auto ELEMENT_SIZE_UV = sizeof(godot::Vector2);
+	constexpr auto ELEMENT_SIZE_COLOR = sizeof(int32_t);
+
+	constexpr auto VERTEX_ELEMENT_SIZE = ELEMENT_SIZE_POSITION + ELEMENT_SIZE_NORMAL_TANGENT;
+	constexpr auto ATTRIB_ELEMENT_SIZE = ELEMENT_SIZE_UV + ELEMENT_SIZE_COLOR;
+
 	if (vertices.size() != num_vertices || indices.size() != num_indices || indices_changed)
 	{
-		Array arrays;
-		arrays.resize(Mesh::ARRAY_MAX);
-		arrays[Mesh::ARRAY_VERTEX] = vertices;
-		arrays[Mesh::ARRAY_TEX_UV] = uvs;
-		arrays[Mesh::ARRAY_COLOR] = colors;
-		arrays[Mesh::ARRAY_INDEX] = indices;
-		RS::get_singleton()->mesh_add_surface_from_arrays(mesh, RS::PrimitiveType::PRIMITIVE_TRIANGLES, arrays, Array(), Dictionary(), RS::ArrayFormat::ARRAY_FLAG_USE_DYNAMIC_UPDATE);
+		num_vertices = vertices.size();
+		num_indices = get_number_of_indices(indices, num_vertices);
+		indices_changed = false;
+
+		// GDExtension provides only one interface for creating a surface
+		// It must be done through mesh_add_surface_from_arrays or mesh_add_surface
+		// Both of these require "raw" data - it is then converted to GL data
+		constexpr uint64_t SURFACE_FORMAT =
+			godot::RenderingServer::ARRAY_FORMAT_VERTEX |
+			godot::RenderingServer::ARRAY_FORMAT_NORMAL |
+			godot::RenderingServer::ARRAY_FORMAT_TANGENT |
+			godot::RenderingServer::ARRAY_FORMAT_COLOR |
+			godot::RenderingServer::ARRAY_FORMAT_TEX_UV |
+			godot::RenderingServer::ARRAY_FORMAT_INDEX |
+			godot::RenderingServer::ARRAY_FLAG_USE_2D_VERTICES |
+			godot::RenderingServer::ARRAY_FLAG_USE_DYNAMIC_UPDATE |
+			godot::RenderingServer::ARRAY_FLAG_FORMAT_CURRENT_VERSION;
+		
+		godot::PackedByteArray temp_vertex_data;
+		temp_vertex_data.resize(VERTEX_ELEMENT_SIZE * num_vertices);
+
+		godot::PackedByteArray temp_attrib_data;
+		temp_attrib_data.resize(ATTRIB_ELEMENT_SIZE * num_vertices);
+		
+		// Required fields to create a surface
+		godot::Dictionary surface_dict;
+		surface_dict["primitive"] = godot::RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES;
+		surface_dict["format"] = SURFACE_FORMAT;
+		surface_dict["vertex_data"] = temp_vertex_data;
+		surface_dict["vertex_count"] = num_vertices;
+		surface_dict["attribute_data"] = temp_attrib_data;
+		surface_dict["index_data"] = indices;
+		surface_dict["index_count"] = num_indices;
+		surface_dict["aabb"] = godot::AABB();
+
+		RS::get_singleton()->mesh_clear(mesh);
+		RS::get_singleton()->mesh_add_surface(mesh, surface_dict);
+		// TODO: Add material to mesh
+
 		Dictionary surface = RS::get_singleton()->mesh_get_surface(mesh, 0);
 		RS::ArrayFormat surface_format = (RS::ArrayFormat) static_cast<int64_t>(surface["format"]);
-		surface_offsets[RS::ARRAY_VERTEX] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, vertices.size(), RS::ARRAY_VERTEX);
-		surface_offsets[RS::ARRAY_COLOR] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, vertices.size(), RS::ARRAY_COLOR);
-		surface_offsets[RS::ARRAY_TEX_UV] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, vertices.size(), RS::ARRAY_TEX_UV);
-		vertex_stride = RS::get_singleton()->mesh_surface_get_format_vertex_stride(surface_format, vertices.size());
-		attribute_stride = RS::get_singleton()->mesh_surface_get_format_attribute_stride(surface_format, vertices.size());
+		surface_offsets[RS::ARRAY_VERTEX] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_VERTEX);
+		surface_offsets[RS::ARRAY_NORMAL] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_NORMAL);
+		surface_offsets[RS::ARRAY_TANGENT] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_TANGENT);
+		surface_offsets[RS::ARRAY_COLOR] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_COLOR);
+		surface_offsets[RS::ARRAY_TEX_UV] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_TEX_UV);
+		vertex_stride = RS::get_singleton()->mesh_surface_get_format_vertex_stride(surface_format, num_vertices);
+		normal_tangent_stride = RS::get_singleton()->mesh_surface_get_format_normal_tangent_stride(surface_format, num_vertices);
+		attribute_stride = RS::get_singleton()->mesh_surface_get_format_attribute_stride(surface_format, num_vertices);
 		vertex_buffer = surface["vertex_data"];
 		attribute_buffer = surface["attribute_data"];
-		num_vertices = vertices.size();
-		num_indices = indices.size();
-		indices_changed = false;
 	}
-	else
+
+	auto aabb_new = AABB(Vector3(), Vector3());
+
+	uint8_t *vertex_write_buffer = vertex_buffer.ptrw();
+	uint8_t *attribute_write_buffer = attribute_buffer.ptrw();
+	for (int i = 0; i < vertices.size(); i++)
 	{
-		AABB aabb_new;
-		uint8_t color[4] =
-		{
-			uint8_t(CLAMP(colors[0].r * 255.0, 0.0, 255.0)),
-			uint8_t(CLAMP(colors[0].g * 255.0, 0.0, 255.0)),
-			uint8_t(CLAMP(colors[0].b * 255.0, 0.0, 255.0)),
-			uint8_t(CLAMP(colors[0].a * 255.0, 0.0, 255.0))
-		};
+		const auto position = vertices[i];
+		const auto normal = compress_normal(Vector3(0.f, 0.f, 1.f));
+		const auto color = colors[i].to_abgr32();
+		const auto uv = uvs[i];
 
-		uint8_t *vertex_write_buffer = vertex_buffer.ptrw();
-		uint8_t *attribute_write_buffer = attribute_buffer.ptrw();
-		for (int i = 0; i < vertices.size(); i++)
+		if (i == 0)
 		{
-			Vector2 vertex(vertices[i]);
-			if (i == 0)
-			{
-				aabb_new.position = Vector3(vertex.x, vertex.y, 0);
-				aabb_new.size = Vector3();
-			}
-			else
-			{
-				aabb_new.expand_to(Vector3(vertex.x, vertex.y, 0));
-			}
-
-			float uv[2] = {(float) uvs[i].x, (float) uvs[i].y};
-			memcpy(&vertex_write_buffer[i * vertex_stride + surface_offsets[RS::ARRAY_VERTEX]], &vertex, sizeof(float) * 2);
-			memcpy(&attribute_write_buffer[i * attribute_stride + surface_offsets[RS::ARRAY_COLOR]], color, 4);
-			memcpy(&attribute_write_buffer[i * attribute_stride + surface_offsets[RS::ARRAY_TEX_UV]], uv, 8);
+			aabb_new.position = Vector3(position.x, position.y, 0.f);
 		}
-		RS::get_singleton()->mesh_surface_update_vertex_region(mesh, 0, 0, vertex_buffer);
-		RS::get_singleton()->mesh_surface_update_attribute_region(mesh, 0, 0, attribute_buffer);
-		RS::get_singleton()->mesh_set_custom_aabb(mesh, aabb_new);
+		else
+		{
+			aabb_new.expand_to(Vector3(position.x, position.y, 0.f));
+		}
+		
+		memcpy(&vertex_write_buffer[i * vertex_stride + surface_offsets[RS::ARRAY_VERTEX]], &position, ELEMENT_SIZE_POSITION);
+		memcpy(&vertex_write_buffer[i * normal_tangent_stride + surface_offsets[RS::ARRAY_NORMAL]], &normal, ELEMENT_SIZE_NORMAL_TANGENT);
+		memcpy(&attribute_write_buffer[i * attribute_stride + surface_offsets[RS::ARRAY_COLOR]], &color, ELEMENT_SIZE_COLOR);
+		memcpy(&attribute_write_buffer[i * attribute_stride + surface_offsets[RS::ARRAY_TEX_UV]], &uv, ELEMENT_SIZE_UV);
 	}
+	RS::get_singleton()->mesh_surface_update_vertex_region(mesh, 0, 0, vertex_buffer);
+	RS::get_singleton()->mesh_surface_update_attribute_region(mesh, 0, 0, attribute_buffer);
+	RS::get_singleton()->mesh_set_custom_aabb(mesh, aabb_new);
 }
 
 void SpineMesh3D::set_material(Ref<Material> material)
 {
 	if (mesh.is_valid())
 	{
-		const auto material_rid = material.is_valid() ? material->get_rid() : RID();
-		RS::get_singleton()->mesh_surface_set_material(mesh, 0, material_rid);
+		if (RS::get_singleton()->mesh_get_surface_count(mesh) > 0)
+		{
+			RS::get_singleton()->instance_geometry_set_material_override(get_instance(), material.is_valid() ? material->get_rid() : RID());
+		}
 	}
 }
 
@@ -633,6 +719,9 @@ void SpineSprite::update_skeleton(float delta)
 
 void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 {
+	// In 3D, use Vector3 rather than Vector2, so use stride of 3
+	constexpr size_t VERTEX_SIZE = 2;
+
 	auto statics = SpineSpriteStatics::instance();
 	spine::Skeleton *skeleton = skeleton_ref->get_spine_object();
 	for (int i = 0, n = (int) skeleton->getSlots().size(); i < n; ++i)
@@ -660,6 +749,8 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 		spine::Vector<float> *vertices = &statics.scratch_vertices;
 		spine::Vector<float> *uvs;
 		spine::Vector<unsigned short> *indices;
+
+		using indices_underlying_type = std::remove_pointer<decltype(indices)>::type::value_type;
 
 		if (attachment->getRTTI().isExactly(spine::RegionAttachment::rtti))
 		{
@@ -732,15 +823,24 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				mesh_instance->colors.set(j, Color(tint.r, tint.g, tint.b, tint.a));
 			}
 
+			const auto index_element_size = get_index_element_size(num_vertices);
+
 			auto indices_changed = false;
-			if (mesh_instance->indices.size() == indices->size())
+			if (get_number_of_indices(mesh_instance->indices, num_vertices) == indices->size())
 			{
-				auto old_indices = mesh_instance->indices.ptr();
-				auto new_indices = indices->buffer();
-				for (int j = 0; j < (int) indices->size(); j++) {
-					if (old_indices[j] != new_indices[j]) {
-						indices_changed = true;
-						break;
+				if (index_element_size == sizeof(indices_underlying_type))
+				{
+					indices_changed = memcmp(mesh_instance->indices.ptr(), indices->buffer(), mesh_instance->indices.size());
+				}
+				else
+				{
+					for (int i = 0; i < indices->size(); ++i)
+					{
+						if (mesh_instance->indices.decode_u32(i * sizeof(uint32_t)) != indices->buffer()[i])
+						{
+							indices_changed = true;
+							break;
+						}
 					}
 				}
 			}
@@ -751,10 +851,16 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 
 			if (indices_changed)
 			{
-				mesh_instance->indices.resize((int) indices->size());
-				for (int j = 0; j < (int) indices->size(); ++j)
+				mesh_instance->indices.resize(indices->size() * index_element_size);
+				if (index_element_size == sizeof(indices_underlying_type))
 				{
-					mesh_instance->indices.set(j, indices->buffer()[j]);
+					memcpy(mesh_instance->indices.ptrw(), indices->buffer(), mesh_instance->indices.size());
+				}
+				else
+				{
+					// TODO
+					// Manual copy
+					assert(false);
 				}
 				mesh_instance->indices_changed = true;
 			}

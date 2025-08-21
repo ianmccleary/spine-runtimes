@@ -56,9 +56,10 @@ protected:
 	static void _bind_methods();
 
 	PackedVector2Array vertices;
+	PackedVector3Array normals;
 	PackedVector2Array uvs;
 	PackedColorArray colors;
-	PackedInt32Array indices;
+	PackedByteArray indices;
 	SpineRendererObject *renderer_object;
 
 	bool indices_changed;
