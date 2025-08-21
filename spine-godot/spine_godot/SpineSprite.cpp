@@ -343,8 +343,8 @@ void SpineSprite::_bind_methods()
 	ClassDB::bind_method(D_METHOD("get_time_scale"), &SpineSprite::get_time_scale);
 	ClassDB::bind_method(D_METHOD("set_time_scale", "v"), &SpineSprite::set_time_scale);
 
-	ClassDB::bind_method(D_METHOD("get_z_offset"), &SpineSprite::get_z_offset);
-	ClassDB::bind_method(D_METHOD("set_z_offset", "v"), &SpineSprite::set_z_offset);
+	ClassDB::bind_method(D_METHOD("get_z_spacing"), &SpineSprite::get_z_spacing);
+	ClassDB::bind_method(D_METHOD("set_z_spacing", "v"), &SpineSprite::set_z_spacing);
 
 	ClassDB::bind_method(D_METHOD("get_use_aabb_sorting"), &SpineSprite::get_use_aabb_sorting);
 	ClassDB::bind_method(D_METHOD("set_use_aabb_sorting", "v"), &SpineSprite::set_use_aabb_sorting);
@@ -371,7 +371,7 @@ void SpineSprite::_bind_methods()
 
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "skeleton_data_res", PropertyHint::PROPERTY_HINT_RESOURCE_TYPE, "SpineSkeletonDataResource"), "set_skeleton_data_res", "get_skeleton_data_res");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "update_mode", PROPERTY_HINT_ENUM, "Process,Physics,Manual"), "set_update_mode", "get_update_mode");
-	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "z_offset"), "set_z_offset", "get_z_offset");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "z_spacing"), "set_z_spacing", "get_z_spacing");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_aabb_sorting"), "set_use_aabb_sorting", "get_use_aabb_sorting");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_sorting_offset"), "set_use_sorting_offset", "get_use_sorting_offset");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sorting_offset_multiplier"), "set_sorting_offset_multiplier", "get_sorting_offset_multiplier");
@@ -748,7 +748,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 		spine::Attachment *attachment = slot->getAttachment();
 		SpineMesh3D *mesh_instance = mesh_instances[i];
 		mesh_instance->set_visible(false);
-		mesh_instance->set_position(Vector3(0.f, 0.f, i * z_offset));
+		mesh_instance->set_position(Vector3(0.f, 0.f, i * z_spacing));
 		if (use_sorting_offset)
 		{
 			mesh_instance->set_sorting_offset(i * sorting_offset_multiplier);
@@ -1100,14 +1100,14 @@ float SpineSprite::get_time_scale()
 	return time_scale;
 }
 
-void SpineSprite::set_z_offset(float value)
+void SpineSprite::set_z_spacing(float value)
 {
-	z_offset = value;
+	z_spacing = value;
 }
 
-float SpineSprite::get_z_offset()
+float SpineSprite::get_z_spacing()
 {
-	return z_offset;
+	return z_spacing;
 }
 
 void SpineSprite::set_use_aabb_sorting(bool value)

@@ -95,7 +95,7 @@ protected:
 	Ref<SpineAnimationState> animation_state;
 	SpineConstant::UpdateMode update_mode;
 	float time_scale;
-	float z_offset;
+	float z_spacing = 0.f;
 
 	String preview_skin;
 	String preview_animation;
@@ -175,9 +175,9 @@ public:
 
 	float get_time_scale();
 
-	void set_z_offset(float value);
+	void set_z_spacing(float value);
 
-	float get_z_offset();
+	float get_z_spacing();
 
 	bool get_use_aabb_sorting() const { return use_aabb_sorting; }
 	void set_use_aabb_sorting(bool value);
