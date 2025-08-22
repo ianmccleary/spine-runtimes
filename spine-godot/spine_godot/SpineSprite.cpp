@@ -775,8 +775,6 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 		spine::Vector<float> *uvs;
 		spine::Vector<unsigned short> *indices;
 
-		using indices_underlying_type = std::remove_pointer<decltype(indices)>::type::value_type;
-
 		if (attachment->getRTTI().isExactly(spine::RegionAttachment::rtti))
 		{
 			auto *region = (spine::RegionAttachment *) attachment;
@@ -853,21 +851,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			auto indices_changed = false;
 			if (get_number_of_indices(mesh_instance->indices, num_vertices) == indices->size())
 			{
-				if (index_element_size == sizeof(indices_underlying_type))
-				{
-					indices_changed = memcmp(mesh_instance->indices.ptr(), indices->buffer(), mesh_instance->indices.size());
-				}
-				else
-				{
-					for (int i = 0; i < indices->size(); ++i)
-					{
-						if (mesh_instance->indices.decode_u32(i * sizeof(uint32_t)) != indices->buffer()[i])
-						{
-							indices_changed = true;
-							break;
-						}
-					}
-				}
+				indices_changed = memcmp(mesh_instance->indices.ptr(), indices->buffer(), mesh_instance->indices.size());
 			}
 			else
 			{
@@ -877,16 +861,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			if (indices_changed)
 			{
 				mesh_instance->indices.resize(indices->size() * index_element_size);
-				if (index_element_size == sizeof(indices_underlying_type))
-				{
-					memcpy(mesh_instance->indices.ptrw(), indices->buffer(), mesh_instance->indices.size());
-				}
-				else
-				{
-					// TODO
-					// Manual copy
-					assert(false);
-				}
+				memcpy(mesh_instance->indices.ptrw(), indices->buffer(), mesh_instance->indices.size());
 				mesh_instance->indices_changed = true;
 			}
 
