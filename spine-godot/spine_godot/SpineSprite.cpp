@@ -112,14 +112,7 @@ public:
 
 SpineSpriteStatics *SpineSpriteStatics::_instance = nullptr;
 
-SpineMesh3D::SpineMesh3D()
-	: renderer_object(nullptr),
-	indices_changed(true),
-	num_vertices(0),
-	num_indices(0),
-	vertex_stride(0),
-	normal_tangent_stride(0),
-	attribute_stride(0)
+SpineMesh3D::SpineMesh3D() : renderer_object(nullptr)
 {
 	if (RS::get_singleton())
 	{
@@ -157,14 +150,6 @@ void SpineMesh3D::_bind_methods()
 namespace
 {
 	constexpr int32_t MAX_UINT_16 = std::numeric_limits<uint16_t>::max();
-	
-	struct CompressedNormalTangent
-	{
-		uint16_t na;
-		uint16_t nb;
-		uint16_t ta;
-		uint16_t tb;
-	};
 
 	godot::Vector3 generate_tangent_from_normal(const godot::Vector3& normal)
 	{
@@ -203,82 +188,128 @@ namespace
 	}
 }
 
-void SpineMesh3D::update_mesh()
+ElementLayout::ElementLayout(RS::ArrayFormat format, size_t vertex_count, int32_t type)
 {
-	constexpr auto ELEMENT_SIZE_POSITION = sizeof(godot::Vector2);
-	constexpr auto ELEMENT_SIZE_NORMAL_TANGENT = sizeof(CompressedNormalTangent);
-	constexpr auto ELEMENT_SIZE_UV = sizeof(godot::Vector2);
-	constexpr auto ELEMENT_SIZE_COLOR = sizeof(int32_t);
-
-	constexpr auto VERTEX_ELEMENT_SIZE = ELEMENT_SIZE_POSITION + ELEMENT_SIZE_NORMAL_TANGENT;
-	constexpr auto ATTRIB_ELEMENT_SIZE = ELEMENT_SIZE_UV + ELEMENT_SIZE_COLOR;
-
-	if (vertices.size() != num_vertices || indices.size() != num_indices || indices_changed)
+	offset = RS::get_singleton()->mesh_surface_get_format_offset(format, vertex_count, type);
+	switch (type)
 	{
-		num_vertices = vertices.size();
-		num_indices = get_number_of_indices(indices, num_vertices);
-		indices_changed = false;
-
-		// GDExtension provides only one interface for creating a surface
-		// It must be done through mesh_add_surface_from_arrays or mesh_add_surface
-		// Both of these require "raw" data - it is then converted to GL data
-		constexpr uint64_t SURFACE_FORMAT =
-			godot::RenderingServer::ARRAY_FORMAT_VERTEX |
-			godot::RenderingServer::ARRAY_FORMAT_NORMAL |
-			godot::RenderingServer::ARRAY_FORMAT_TANGENT |
-			godot::RenderingServer::ARRAY_FORMAT_COLOR |
-			godot::RenderingServer::ARRAY_FORMAT_TEX_UV |
-			godot::RenderingServer::ARRAY_FORMAT_INDEX |
-			godot::RenderingServer::ARRAY_FLAG_USE_2D_VERTICES |
-			godot::RenderingServer::ARRAY_FLAG_USE_DYNAMIC_UPDATE |
-			godot::RenderingServer::ARRAY_FLAG_FORMAT_CURRENT_VERSION;
+		case RS::ARRAY_VERTEX:
+		stride = RS::get_singleton()->mesh_surface_get_format_vertex_stride(format, vertex_count);
+		break;
 		
-		godot::PackedByteArray temp_vertex_data;
-		temp_vertex_data.resize(VERTEX_ELEMENT_SIZE * num_vertices);
+		case RS::ARRAY_NORMAL:
+		case RS::ARRAY_TANGENT:
+		stride = RS::get_singleton()->mesh_surface_get_format_normal_tangent_stride(format, vertex_count);
+		break;
 
-		godot::PackedByteArray temp_attrib_data;
-		temp_attrib_data.resize(ATTRIB_ELEMENT_SIZE * num_vertices);
-		
-		// Required fields to create a surface
+		case RS::ARRAY_COLOR:
+		case RS::ARRAY_TEX_UV:
+		stride = RS::get_singleton()->mesh_surface_get_format_attribute_stride(format, vertex_count);
+		break;
+
+		default:
+		stride = 0;
+		break;
+	}
+}
+
+bool SpineMesh3D::prepare_mesh(size_t new_vertex_count, spine::Vector<uint16_t>& new_indices)
+{
+	const auto current_vertex_count = get_vertex_count();
+	const auto current_index_count = get_index_count();
+
+	const auto new_index_count = new_indices.size();
+
+	bool remake_surface = false;
+
+	remake_surface |= current_vertex_count != new_vertex_count;
+	remake_surface |= current_index_count != new_index_count || memcmp(index_buffer.ptr(), new_indices.buffer(), new_index_count * INDEX_ELEMENT_SIZE);
+
+	if (remake_surface)
+	{
+		vertex_buffer.resize(new_vertex_count * VERTEX_ELEMENT_SIZE);
+		attribute_buffer.resize(new_vertex_count * ATTRIB_ELEMENT_SIZE);
+
+		index_buffer.resize(new_index_count * INDEX_ELEMENT_SIZE);
+		memcpy(index_buffer.ptrw(), new_indices.buffer(), new_index_count * INDEX_ELEMENT_SIZE);
+
 		godot::Dictionary surface_dict;
 		surface_dict["primitive"] = godot::RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES;
 		surface_dict["format"] = SURFACE_FORMAT;
-		surface_dict["vertex_data"] = temp_vertex_data;
-		surface_dict["vertex_count"] = num_vertices;
-		surface_dict["attribute_data"] = temp_attrib_data;
-		surface_dict["index_data"] = indices;
-		surface_dict["index_count"] = num_indices;
+		surface_dict["vertex_data"] = vertex_buffer;
+		surface_dict["vertex_count"] = new_vertex_count;
+		surface_dict["attribute_data"] = attribute_buffer;
+		surface_dict["index_data"] = index_buffer;
+		surface_dict["index_count"] = new_index_count;
 		surface_dict["aabb"] = godot::AABB();
 
+		// Update mesh
 		RS::get_singleton()->mesh_clear(mesh);
 		RS::get_singleton()->mesh_add_surface(mesh, surface_dict);
-		// TODO: Add material to mesh
 
+		// Update layout information
 		Dictionary surface = RS::get_singleton()->mesh_get_surface(mesh, 0);
 		RS::ArrayFormat surface_format = (RS::ArrayFormat) static_cast<int64_t>(surface["format"]);
-		surface_offsets[RS::ARRAY_VERTEX] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_VERTEX);
-		surface_offsets[RS::ARRAY_NORMAL] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_NORMAL);
-		surface_offsets[RS::ARRAY_TANGENT] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_TANGENT);
-		surface_offsets[RS::ARRAY_COLOR] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_COLOR);
-		surface_offsets[RS::ARRAY_TEX_UV] = RS::get_singleton()->mesh_surface_get_format_offset(surface_format, num_vertices, RS::ARRAY_TEX_UV);
-		vertex_stride = RS::get_singleton()->mesh_surface_get_format_vertex_stride(surface_format, num_vertices);
-		normal_tangent_stride = RS::get_singleton()->mesh_surface_get_format_normal_tangent_stride(surface_format, num_vertices);
-		attribute_stride = RS::get_singleton()->mesh_surface_get_format_attribute_stride(surface_format, num_vertices);
-		vertex_buffer = surface["vertex_data"];
-		attribute_buffer = surface["attribute_data"];
+
+		vertex_layout = ElementLayout(surface_format, new_vertex_count, RS::ARRAY_VERTEX);
+		normal_layout = ElementLayout(surface_format, new_vertex_count, RS::ARRAY_NORMAL);
+		tangent_layout = ElementLayout(surface_format, new_vertex_count, RS::ARRAY_TANGENT);
+		uv_layout = ElementLayout(surface_format, new_vertex_count, RS::ARRAY_TEX_UV);
+		color_layout = ElementLayout(surface_format, new_vertex_count, RS::ARRAY_COLOR);
+
+		const auto new_vertex_buffer = static_cast<PackedByteArray>(surface["vertex_data"]);
+		const auto new_attribute_buffer = static_cast<PackedByteArray>(surface["attribute_data"]);
+
+		vertex_buffer = new_vertex_buffer;
+		attribute_buffer = new_attribute_buffer;
+
+		// Fill normals and tangents, as they never change
+		const auto cnt = compress_normal(Vector3(0.f, 0.f, -1.f));
+		for (int i = 0; i < new_vertex_count; ++i)
+		{
+			ERR_FAIL_COND_V(normal_layout.calculate_buffer_index(i) >= vertex_buffer.size(), true);
+			memcpy(&vertex_buffer.ptrw()[normal_layout.calculate_buffer_index(i)], &cnt, sizeof(::CompressedNormalTangent));
+		}
+
+		return true;
 	}
 
+	return false;
+}
+
+struct AttribBufferElement
+{
+	int32_t color;
+	float uv_x;
+	float uv_y;
+};
+
+void SpineMesh3D::assign_uvs_and_color(spine::Vector<float>& new_uvs, spine::Color new_color)
+{
+	const auto vertex_count = get_vertex_count();
+	ERR_FAIL_COND(vertex_count != new_uvs.size() / 2);
+
+	const auto color = godot::Color(new_color.r, new_color.g, new_color.b, new_color.a).to_abgr32();
+
+	for (int i = 0; i < vertex_count; ++i)
+	{
+		ERR_FAIL_COND(color_layout.calculate_buffer_index(i) >= attribute_buffer.size());
+		ERR_FAIL_COND(uv_layout.calculate_buffer_index(i) >= attribute_buffer.size());
+		const auto uv = Vector2(new_uvs[i * 2], new_uvs[i * 2 + 1]);
+		memcpy(&attribute_buffer.ptrw()[color_layout.calculate_buffer_index(i)], &color, ELEMENT_SIZE_COLOR);
+		memcpy(&attribute_buffer.ptrw()[uv_layout.calculate_buffer_index(i)], &uv, ELEMENT_SIZE_UV);
+	}
+}
+
+void SpineMesh3D::update_mesh()
+{
 	auto aabb_new = AABB(Vector3(), Vector3());
 
-	uint8_t *vertex_write_buffer = vertex_buffer.ptrw();
-	uint8_t *attribute_write_buffer = attribute_buffer.ptrw();
-	for (int i = 0; i < vertices.size(); i++)
+	const auto vertex_count = get_vertex_count();
+	const auto vertices = get_vertex_buffer_rw<Vector2>();
+	for (int i = 0; i < vertex_count; i++)
 	{
 		const auto position = vertices[i];
-		const auto normal = compress_normal(Vector3(0.f, 0.f, -1.f));
-		const auto color = colors[i].to_abgr32();
-		const auto uv = uvs[i];
-
 		if (i == 0)
 		{
 			aabb_new.position = Vector3(position.x, position.y, 0.f);
@@ -287,13 +318,7 @@ void SpineMesh3D::update_mesh()
 		{
 			aabb_new.expand_to(Vector3(position.x, position.y, 0.f));
 		}
-		
-		memcpy(&vertex_write_buffer[i * vertex_stride + surface_offsets[RS::ARRAY_VERTEX]], &position, ELEMENT_SIZE_POSITION);
-		memcpy(&vertex_write_buffer[i * normal_tangent_stride + surface_offsets[RS::ARRAY_NORMAL]], &normal, ELEMENT_SIZE_NORMAL_TANGENT);
-		memcpy(&attribute_write_buffer[i * attribute_stride + surface_offsets[RS::ARRAY_COLOR]], &color, ELEMENT_SIZE_COLOR);
-		memcpy(&attribute_write_buffer[i * attribute_stride + surface_offsets[RS::ARRAY_TEX_UV]], &uv, ELEMENT_SIZE_UV);
 	}
-
 	const auto aabb_center = aabb_new.get_center();
 	aabb_new.expand_to(Vector3(aabb_center.x, aabb_center.y, -0.1f));
 	aabb_new.expand_to(Vector3(aabb_center.x, aabb_center.y, 0.1f));
@@ -771,41 +796,61 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 		spine::Color slot_color = slot->getColor();
 		spine::Color tint(skeleton_color.r * slot_color.r, skeleton_color.g * slot_color.g, skeleton_color.b * slot_color.b, skeleton_color.a * slot_color.a);
 		SpineRendererObject *renderer_object;
-		spine::Vector<float> *vertices = &statics.scratch_vertices;
-		spine::Vector<float> *uvs;
-		spine::Vector<unsigned short> *indices;
 
 		if (attachment->getRTTI().isExactly(spine::RegionAttachment::rtti))
 		{
 			const auto region = static_cast<spine::RegionAttachment*>(attachment);
 
-			vertices->setSize(8, 0);
-			region->computeWorldVertices(*slot, *vertices, 0);
+			mesh_instance->prepare_mesh(
+				4,
+				statics.quad_indices);
+
+			region->computeWorldVertices(
+				*slot,
+				mesh_instance->get_vertex_buffer_rw<float>(),
+				mesh_instance->get_vertex_layout().offset,
+				mesh_instance->get_vertex_layout().stride / sizeof(float));
+
 			renderer_object = static_cast<SpineRendererObject*>(static_cast<spine::AtlasRegion*>(region->getRegion())->page->texture);
-			uvs = &region->getUVs();
-			indices = &statics.quad_indices;
 
 			auto attachment_color = region->getColor();
 			tint.r *= attachment_color.r;
 			tint.g *= attachment_color.g;
 			tint.b *= attachment_color.b;
 			tint.a *= attachment_color.a;
+
+			mesh_instance->assign_uvs_and_color(
+				region->getUVs(),
+				tint);
 		}
 		else if (attachment->getRTTI().isExactly(spine::MeshAttachment::rtti))
 		{
 			const auto mesh = static_cast<spine::MeshAttachment*>(attachment);
 
-			vertices->setSize(mesh->getWorldVerticesLength(), 0);
-			mesh->computeWorldVertices(*slot, *vertices);
+			mesh_instance->prepare_mesh(
+				// prepare_mesh expects number of vertices, getWorldVerticesLength returns number of elements
+				mesh->getWorldVerticesLength() / 2,
+				mesh->getTriangles());
+			
+			mesh->computeWorldVertices(
+				*slot,
+				0,
+				mesh->getWorldVerticesLength(),
+				mesh_instance->get_vertex_buffer_rw<float>(),
+				mesh_instance->get_vertex_layout().offset,
+				mesh_instance->get_vertex_layout().stride / sizeof(float));
+
 			renderer_object = static_cast<SpineRendererObject*>(static_cast<spine::AtlasRegion*>(mesh->getRegion())->page->texture);
-			uvs = &mesh->getUVs();
-			indices = &mesh->getTriangles();
 
 			auto attachment_color = mesh->getColor();
 			tint.r *= attachment_color.r;
 			tint.g *= attachment_color.g;
 			tint.b *= attachment_color.b;
 			tint.a *= attachment_color.a;
+			
+			mesh_instance->assign_uvs_and_color(
+				mesh->getUVs(),
+				tint);
 		}
 		else if (attachment->getRTTI().isExactly(spine::ClippingAttachment::rtti))
 		{
@@ -821,6 +866,9 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 
 		if (skeleton_clipper->isClipping())
 		{
+			// TODO
+			// Implement clipping
+			/*
 			skeleton_clipper->clipTriangles(*vertices, *indices, *uvs, 2);
 			if (skeleton_clipper->getClippedTriangles().size() == 0)
 			{
@@ -831,40 +879,11 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			vertices = &skeleton_clipper->getClippedVertices();
 			uvs = &skeleton_clipper->getClippedUVs();
 			indices = &skeleton_clipper->getClippedTriangles();
+			*/
 		}
 
-		if (indices->size() > 0)
+		if (mesh_instance->get_index_count() > 0)
 		{
-			size_t num_vertices = vertices->size() / 2;
-			mesh_instance->vertices.resize((int) num_vertices);
-			memcpy(mesh_instance->vertices.ptrw(), vertices->buffer(), num_vertices * 2 * sizeof(float));
-			mesh_instance->uvs.resize((int) num_vertices);
-			memcpy(mesh_instance->uvs.ptrw(), uvs->buffer(), num_vertices * 2 * sizeof(float));
-			mesh_instance->colors.resize((int) num_vertices);
-			for (int j = 0; j < (int) num_vertices; j++)
-			{
-				mesh_instance->colors.set(j, Color(tint.r, tint.g, tint.b, tint.a));
-			}
-
-			const auto index_element_size = get_index_element_size(num_vertices);
-
-			auto indices_changed = false;
-			if (get_number_of_indices(mesh_instance->indices, num_vertices) == indices->size())
-			{
-				indices_changed = memcmp(mesh_instance->indices.ptr(), indices->buffer(), mesh_instance->indices.size());
-			}
-			else
-			{
-				indices_changed = true;
-			}
-
-			if (indices_changed)
-			{
-				mesh_instance->indices.resize(indices->size() * index_element_size);
-				memcpy(mesh_instance->indices.ptrw(), indices->buffer(), mesh_instance->indices.size());
-				mesh_instance->indices_changed = true;
-			}
-
 			mesh_instance->renderer_object = renderer_object;
 
 			spine::BlendMode blend_mode = slot->getData().getBlendMode();

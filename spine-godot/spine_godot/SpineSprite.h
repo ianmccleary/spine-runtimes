@@ -46,40 +46,91 @@ class SpineSprite;
 
 class Attachment;
 
+struct ElementLayout
+{
+	uint32_t offset = 0;
+	uint32_t stride = 0;
+
+	ElementLayout() = default;
+	ElementLayout(RS::ArrayFormat format, size_t vertex_count, int32_t type);
+
+	uint32_t calculate_buffer_index(int element_index)
+	{
+		return element_index * stride + offset;
+	}
+};
+
+struct CompressedNormalTangent
+{
+	uint16_t na;
+	uint16_t nb;
+	uint16_t ta;
+	uint16_t tb;
+};
+
 class SpineMesh3D : public VisualInstance3D {
 	GDCLASS(SpineMesh3D, VisualInstance3D);
 
 	friend class SpineSprite;
 
 protected:
+
+	static const auto ELEMENT_SIZE_POSITION = sizeof(godot::Vector2);
+	static const auto ELEMENT_SIZE_NORMAL_TANGENT = sizeof(CompressedNormalTangent);
+	static const auto ELEMENT_SIZE_UV = sizeof(godot::Vector2);
+	static const auto ELEMENT_SIZE_COLOR = sizeof(int32_t);
+
+	static const auto VERTEX_ELEMENT_SIZE = ELEMENT_SIZE_POSITION + ELEMENT_SIZE_NORMAL_TANGENT;
+	static const auto ATTRIB_ELEMENT_SIZE = ELEMENT_SIZE_UV + ELEMENT_SIZE_COLOR;
+	static const auto INDEX_ELEMENT_SIZE = sizeof(uint16_t);
+
+	static const uint64_t SURFACE_FORMAT =
+		RS::ARRAY_FORMAT_VERTEX |
+		RS::ARRAY_FORMAT_NORMAL |
+		RS::ARRAY_FORMAT_TANGENT |
+		RS::ARRAY_FORMAT_COLOR |
+		RS::ARRAY_FORMAT_TEX_UV |
+		RS::ARRAY_FORMAT_INDEX |
+		RS::ARRAY_FLAG_USE_2D_VERTICES |
+		RS::ARRAY_FLAG_USE_DYNAMIC_UPDATE |
+		RS::ARRAY_FLAG_FORMAT_CURRENT_VERSION;
+
 	void _notification(int what);
 	static void _bind_methods();
 
-	PackedVector2Array vertices;
-	PackedVector3Array normals;
-	PackedVector2Array uvs;
-	PackedColorArray colors;
-	PackedByteArray indices;
 	SpineRendererObject *renderer_object;
-
-	bool indices_changed;
 
 	RID mesh;
 	Ref<Material> material;
-	uint32_t surface_offsets[RS::ARRAY_MAX];
-	int num_vertices;
-	int num_indices;
 	PackedByteArray vertex_buffer;
 	PackedByteArray attribute_buffer;
-	uint32_t vertex_stride;
-	uint32_t normal_tangent_stride;
-	uint32_t attribute_stride;
+	PackedByteArray index_buffer;
+	ElementLayout vertex_layout;
+	ElementLayout normal_layout;
+	ElementLayout tangent_layout;
+	ElementLayout uv_layout;
+	ElementLayout color_layout;
 
 public:
 	SpineMesh3D();
 	~SpineMesh3D();
 
+	const ElementLayout& get_vertex_layout() const { return vertex_layout; }
+	const ElementLayout& get_normal_layout() const { return normal_layout; }
+	const ElementLayout& get_tangent_layout() const { return tangent_layout; }
+	const ElementLayout& get_uv_layout() const { return uv_layout; }
+	const ElementLayout& get_color_layout() const { return color_layout; }
+
+	template<typename T>
+	T* get_vertex_buffer_rw() { return reinterpret_cast<T*>(vertex_buffer.ptrw()); }
+
+	size_t get_vertex_count() const { return vertex_buffer.size() / VERTEX_ELEMENT_SIZE; }
+	size_t get_index_count() const { return index_buffer.size() / INDEX_ELEMENT_SIZE; }
+
+	bool prepare_mesh(size_t new_vertex_count, spine::Vector<uint16_t>& new_indices);
+	void assign_uvs_and_color(spine::Vector<float>& new_uvs, spine::Color new_color);
 	void update_mesh();
+
 	void set_material(Ref<Material> new_material);
 };
 
