@@ -777,11 +777,11 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 
 		if (attachment->getRTTI().isExactly(spine::RegionAttachment::rtti))
 		{
-			auto *region = (spine::RegionAttachment *) attachment;
+			const auto region = static_cast<spine::RegionAttachment*>(attachment);
 
 			vertices->setSize(8, 0);
 			region->computeWorldVertices(*slot, *vertices, 0);
-			renderer_object = (SpineRendererObject *) ((spine::AtlasRegion *) region->getRegion())->page->texture;
+			renderer_object = static_cast<SpineRendererObject*>(static_cast<spine::AtlasRegion*>(region->getRegion())->page->texture);
 			uvs = &region->getUVs();
 			indices = &statics.quad_indices;
 
@@ -793,11 +793,11 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 		}
 		else if (attachment->getRTTI().isExactly(spine::MeshAttachment::rtti))
 		{
-			auto *mesh = (spine::MeshAttachment *) attachment;
+			const auto mesh = static_cast<spine::MeshAttachment*>(attachment);
 
 			vertices->setSize(mesh->getWorldVerticesLength(), 0);
 			mesh->computeWorldVertices(*slot, *vertices);
-			renderer_object = (SpineRendererObject *) ((spine::AtlasRegion *) mesh->getRegion())->page->texture;
+			renderer_object = static_cast<SpineRendererObject*>(static_cast<spine::AtlasRegion*>(mesh->getRegion())->page->texture);
 			uvs = &mesh->getUVs();
 			indices = &mesh->getTriangles();
 
