@@ -738,12 +738,16 @@ void SpineSprite::update_skeleton(float delta)
 void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 {
 	auto& statics = SpineSpriteStatics::instance();
-	spine::Skeleton *skeleton = skeleton_ref->get_spine_object();
-	for (int i = 0, n = (int) skeleton->getSlots().size(); i < n; ++i)
+
+	const auto skeleton = skeleton_ref->get_spine_object();
+	const auto slot_count = skeleton->getSlots().size();
+
+	for (int i = 0; i < slot_count; ++i)
 	{
-		spine::Slot *slot = skeleton->getDrawOrder()[i];
-		spine::Attachment *attachment = slot->getAttachment();
-		SpineMesh3D *mesh_instance = mesh_instances[i];
+		const auto slot = skeleton->getDrawOrder()[i];
+		const auto attachment = slot->getAttachment();
+		const auto mesh_instance = mesh_instances[i];
+
 		mesh_instance->set_visible(false);
 		mesh_instance->set_position(Vector3(0.f, 0.f, i * z_spacing));
 		if (use_sorting_offset)
