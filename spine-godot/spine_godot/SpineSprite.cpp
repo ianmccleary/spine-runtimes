@@ -737,7 +737,7 @@ void SpineSprite::update_skeleton(float delta)
 
 void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 {
-	auto statics = SpineSpriteStatics::instance();
+	auto& statics = SpineSpriteStatics::instance();
 	spine::Skeleton *skeleton = skeleton_ref->get_spine_object();
 	for (int i = 0, n = (int) skeleton->getSlots().size(); i < n; ++i)
 	{
