@@ -146,7 +146,6 @@ void SpineMesh3D::_notification(int what)
 void SpineMesh3D::_bind_methods()
 { }
 
-
 namespace
 {
 	constexpr int32_t MAX_UINT_16 = std::numeric_limits<uint16_t>::max();
@@ -172,19 +171,6 @@ namespace
 			output.ta = MAX_UINT_16;
 		}
 		return output;
-	}
-}
-
-namespace
-{
-	uint64_t get_index_element_size(const uint64_t vertex_count)
-	{
-		return vertex_count <= std::numeric_limits<uint16_t>::max() ? sizeof(uint16_t) : sizeof(uint32_t);
-	}
-
-	size_t get_number_of_indices(const PackedByteArray& indices, const uint64_t vertex_count)
-	{
-		return indices.size() / get_index_element_size(vertex_count);
 	}
 }
 
