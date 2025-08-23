@@ -1,6 +1,7 @@
 name: Upload to Artifacts Only
 
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       godot_tag:
