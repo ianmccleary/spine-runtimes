@@ -185,7 +185,7 @@ bool SpineMesh3D::prepare_mesh(int new_vertex_count, const uint16_t* new_indices
 		attribute_buffer = new_attribute_buffer;
 
 		// Fill normals and tangents, as they never change
-		const auto cnt = compress_normal(Vector3(0.f, 0.f, -1.f));
+		const auto cnt = compress_normal(Vector3(0.f, 0.f, 1.f));
 		for (int i = 0; i < new_vertex_count; ++i)
 		{
 			ERR_FAIL_COND_V(normal_layout.calculate_buffer_index(i) >= vertex_buffer.size(), true);
