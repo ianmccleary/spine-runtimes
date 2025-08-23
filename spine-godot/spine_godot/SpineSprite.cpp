@@ -204,7 +204,7 @@ bool SpineMesh3D::prepare_mesh(int new_vertex_count, spine::Vector<uint16_t>& ne
 	const auto current_vertex_count = get_vertex_count();
 	const auto current_index_count = get_index_count();
 
-	const auto new_index_count = new_indices.size();
+	const auto new_index_count = static_cast<int>(new_indices.size());
 
 	bool remake_surface = false;
 
