@@ -49,69 +49,6 @@
 #include <godot_cpp/classes/font.hpp>
 #endif
 
-// Needed due to shared lib initializers in GDExtension.
-// See: https://x.com/badlogicgames/status/1843661872404591068
-struct SpineSpriteStatics
-{
-private:
-	static SpineSpriteStatics *_instance;
-
-public:
-	Ref<StandardMaterial3D> default_materials[4] = {};
-	int sprite_count;
-	spine::Vector<unsigned short> quad_indices;
-	spine::Vector<float> scratch_vertices;
-	PackedVector2Array scratch_points;
-
-	SpineSpriteStatics() : sprite_count(0)
-	{
-		quad_indices.setSize(6, 0);
-		quad_indices[0] = 0;
-		quad_indices[1] = 1;
-		quad_indices[2] = 2;
-		quad_indices[3] = 2;
-		quad_indices[4] = 3;
-		quad_indices[5] = 0;
-		scratch_vertices.ensureCapacity(1200);
-
-		Ref<StandardMaterial3D> material_normal(memnew(StandardMaterial3D));
-		material_normal->set_blend_mode(BaseMaterial3D::BLEND_MODE_MIX);
-		default_materials[spine::BlendMode_Normal] = material_normal;
-
-		Ref<StandardMaterial3D> material_additive(memnew(StandardMaterial3D));
-		material_additive->set_blend_mode(BaseMaterial3D::BLEND_MODE_ADD);
-		default_materials[spine::BlendMode_Additive] = material_additive;
-
-		Ref<StandardMaterial3D> material_multiply(memnew(StandardMaterial3D));
-		material_multiply->set_blend_mode(BaseMaterial3D::BLEND_MODE_MUL);
-		default_materials[spine::BlendMode_Multiply] = material_multiply;
-
-		Ref<StandardMaterial3D> material_screen(memnew(StandardMaterial3D));
-		material_screen->set_blend_mode(BaseMaterial3D::BLEND_MODE_SUB);
-		default_materials[spine::BlendMode_Screen] = material_screen;
-	}
-
-	static SpineSpriteStatics &instance()
-	{
-		if (!_instance)
-		{
-			_instance = new SpineSpriteStatics();
-		}
-		return *_instance;
-	}
-
-	static void clear()
-	{
-		if (_instance)
-		{
-			delete _instance;
-		}
-		_instance = nullptr;
-	}
-};
-
-SpineSpriteStatics *SpineSpriteStatics::_instance = nullptr;
-
 SpineMesh3D::SpineMesh3D() : renderer_object(nullptr)
 {
 	if (RS::get_singleton())
@@ -199,17 +136,15 @@ ElementLayout::ElementLayout(RS::ArrayFormat format, size_t vertex_count, int32_
 	}
 }
 
-bool SpineMesh3D::prepare_mesh(int new_vertex_count, spine::Vector<uint16_t>& new_indices)
+bool SpineMesh3D::prepare_mesh(int new_vertex_count, const uint16_t* new_indices, int new_index_count)
 {
 	const auto current_vertex_count = get_vertex_count();
 	const auto current_index_count = get_index_count();
 
-	const auto new_index_count = static_cast<int>(new_indices.size());
-
 	bool remake_surface = false;
 
 	remake_surface |= current_vertex_count != new_vertex_count;
-	remake_surface |= current_index_count != new_index_count || memcmp(index_buffer.ptr(), new_indices.buffer(), new_index_count * INDEX_ELEMENT_SIZE);
+	remake_surface |= current_index_count != new_index_count || memcmp(index_buffer.ptr(), new_indices, new_index_count * INDEX_ELEMENT_SIZE);
 
 	if (remake_surface)
 	{
@@ -217,7 +152,7 @@ bool SpineMesh3D::prepare_mesh(int new_vertex_count, spine::Vector<uint16_t>& ne
 		attribute_buffer.resize(new_vertex_count * ATTRIB_ELEMENT_SIZE);
 
 		index_buffer.resize(new_index_count * INDEX_ELEMENT_SIZE);
-		memcpy(index_buffer.ptrw(), new_indices.buffer(), new_index_count * INDEX_ELEMENT_SIZE);
+		memcpy(index_buffer.ptrw(), new_indices, new_index_count * INDEX_ELEMENT_SIZE);
 
 		godot::Dictionary surface_dict;
 		surface_dict["primitive"] = godot::RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES;
@@ -333,11 +268,6 @@ void SpineMesh3D::set_material(Ref<Material> new_material)
 	}
 }
 
-void SpineSprite::clear_statics()
-{
-	SpineSpriteStatics::clear();
-}
-
 void SpineSprite::_bind_methods()
 {
 	ClassDB::bind_method(D_METHOD("set_skeleton_data_res", "skeleton_data_res"), &SpineSprite::set_skeleton_data_res);
@@ -417,20 +347,11 @@ SpineSprite::SpineSprite()
 	modified_bones(false)
 {
 	skeleton_clipper = new spine::SkeletonClipping();
-	auto statics = SpineSpriteStatics::instance();
-	statics.sprite_count++;
 }
 
 SpineSprite::~SpineSprite()
 {
 	delete skeleton_clipper;
-	auto statics = SpineSpriteStatics::instance();
-	statics.sprite_count--;
-	if (!statics.sprite_count)
-	{
-		for (int i = 0; i < 4; i++)
-			statics.default_materials[i].unref();
-	}
 }
 
 void SpineSprite::set_skeleton_data_res(const Ref<SpineSkeletonDataResource> &_skeleton_data)
@@ -487,12 +408,10 @@ void SpineSprite::on_skeleton_data_changed()
 void SpineSprite::generate_meshes_for_slots(Ref<SpineSkeleton> skeleton_ref)
 {
 	auto skeleton = skeleton_ref->get_spine_object();
-	auto statics = SpineSpriteStatics::instance();
 	for (int i = 0, n = (int) skeleton->getSlots().size(); i < n; i++)
 	{
 		auto mesh_instance = memnew(SpineMesh3D);
 		mesh_instance->set_position(Vector3(0, 0, 0));
-		mesh_instance->set_material(statics.default_materials[spine::BlendMode_Normal]);
 		add_child(mesh_instance);
 		mesh_instances.push_back(mesh_instance);
 		slot_nodes.add(spine::Vector<SpineSlotNode *>());
@@ -758,7 +677,12 @@ void SpineSprite::update_skeleton(float delta)
 
 void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 {
-	auto& statics = SpineSpriteStatics::instance();
+	const int QUAD_INDICES_LENGTH = 6;
+	const uint16_t QUAD_INDICES[QUAD_INDICES_LENGTH] =
+	{
+		0, 1, 2,
+		2, 3, 0
+	};
 
 	const auto skeleton = skeleton_ref->get_spine_object();
 	const auto slot_count = skeleton->getSlots().size();
@@ -799,7 +723,8 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 
 			mesh_instance->prepare_mesh(
 				4,
-				statics.quad_indices);
+				QUAD_INDICES,
+				QUAD_INDICES_LENGTH);
 
 			region->computeWorldVertices(
 				*slot,
@@ -826,7 +751,8 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			mesh_instance->prepare_mesh(
 				// prepare_mesh expects number of vertices, getWorldVerticesLength returns number of elements
 				static_cast<int>(mesh->getWorldVerticesLength()) / 2,
-				mesh->getTriangles());
+				mesh->getTriangles().buffer(),
+				mesh->getTriangles().size());
 			
 			mesh->computeWorldVertices(
 				*slot,
@@ -886,7 +812,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				auto& clipped_uvs = skeleton_clipper->getClippedUVs();
 				auto& clipped_indices = skeleton_clipper->getClippedTriangles();
 				const auto vertex_count = static_cast<int>(clipped_vertices.size()) / 2;
-				mesh_instance->prepare_mesh(vertex_count, clipped_indices);
+				mesh_instance->prepare_mesh(vertex_count, clipped_indices.buffer(), clipped_indices.size());
 				mesh_instance->assign_vertices(clipped_vertices);
 				mesh_instance->assign_uvs_and_color(clipped_uvs, tint);
 			}
@@ -946,8 +872,6 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			// Set the custom material, or the default material
 			if (custom_material.is_valid())
 				mesh_instance->set_material(custom_material);
-			else
-				mesh_instance->set_material(statics.default_materials[slot->getData().getBlendMode()]);
 			
 			mesh_instance->update_mesh();
 			mesh_instance->set_visible(true);
