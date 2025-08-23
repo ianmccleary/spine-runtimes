@@ -223,10 +223,10 @@ bool SpineMesh3D::prepare_mesh(size_t new_vertex_count, spine::Vector<uint16_t>&
 		surface_dict["primitive"] = godot::RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES;
 		surface_dict["format"] = SURFACE_FORMAT;
 		surface_dict["vertex_data"] = vertex_buffer;
-		surface_dict["vertex_count"] = new_vertex_count;
+		surface_dict["vertex_count"] = Variant(new_vertex_count);
 		surface_dict["attribute_data"] = attribute_buffer;
 		surface_dict["index_data"] = index_buffer;
-		surface_dict["index_count"] = new_index_count;
+		surface_dict["index_count"] = Variant(new_index_count);
 		surface_dict["aabb"] = godot::AABB();
 
 		// Update mesh
