@@ -17,9 +17,6 @@ on:
         default: false
 
 env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AWS_EC2_METADATA_DISABLED: true
   GODOT_TAG: ${{ inputs.godot_tag }}
   GODOT_VERSION: ${{ inputs.godot_version }}
   DEV_BUILD: ${{ inputs.dev }}
@@ -97,71 +94,6 @@ jobs:
           name: gdextension-macos-${{ env.GODOT_TAG }}
           path: spine-godot/example-v4-extension/bin/macos/**/*
 
-  build-ios:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Setup python and scons
-        uses: ./.github/actions/setup-godot-deps-4
-
-      - name: Build GDExtension
-        run: |
-          cd spine-godot/build
-          ./setup-extension.sh $GODOT_TAG $DEV_BUILD
-          ./build-extension.sh ios
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: gdextension-ios-${{ env.GODOT_TAG }}
-          path: spine-godot/example-v4-extension/bin/ios/**/*
-
-  build-android:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Make apt sources.list use the default Ubuntu repositories
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/*
-          sudo cp -f spine-godot/build/sources.lst /etc/apt/sources.list
-          sudo apt-get update
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Setup Android SDK & NDK
-        uses: android-actions/setup-android@v2
-
-      - name: Install NDK
-        run: |
-          yes | sudo ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --licenses
-          ${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager --install "ndk;23.2.8568313"
-
-      - name: Setup python and scons
-        uses: ./.github/actions/setup-godot-deps-4
-
-      - name: Build GDExtension
-        run: |
-          cd spine-godot/build
-          ./setup-extension.sh $GODOT_TAG $DEV_BUILD
-          ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/23.2.8568313 ./build-extension.sh android
-          ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/23.2.8568313 ./build-extension.sh android x86_64
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: gdextension-android-${{ env.GODOT_TAG }}
-          path: spine-godot/example-v4-extension/bin/android/*.so
-
   build-web:
     runs-on: ubuntu-latest
     steps:
@@ -190,7 +122,7 @@ jobs:
           path: spine-godot/example-v4-extension/bin/web/*.wasm
 
   upload-to-s3:
-    needs: [build-windows, build-linux-x86_64, build-macos, build-ios, build-android, build-web]
+    needs: [build-windows, build-linux-x86_64, build-macos, build-web]
     runs-on: ubuntu-latest
 
     steps:
@@ -216,35 +148,19 @@ jobs:
           name: gdextension-macos-${{ env.GODOT_TAG }}
           path: artifacts/gdextension-macos-${{ env.GODOT_TAG }}
 
-      - name: Download ios artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: gdextension-ios-${{ env.GODOT_TAG }}
-          path: artifacts/gdextension-ios-${{ env.GODOT_TAG }}
-
-      - name: Download android artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: gdextension-android-${{ env.GODOT_TAG }}
-          path: artifacts/gdextension-android-${{ env.GODOT_TAG }}
-
       - name: Download web artifact
         uses: actions/download-artifact@v4
         with:
           name: gdextension-web-${{ env.GODOT_TAG }}
           path: artifacts/gdextension-web-${{ env.GODOT_TAG }}
 
-      - name: Package and upload artifacts
+      - name: Package artifacts
         shell: bash
-        if: env.AWS_ACCESS_KEY_ID != null
         run: |
-          BRANCH=${GITHUB_REF#refs/heads/}
-          echo "branch: $BRANCH"
-
           cd artifacts
 
           # Create directories matching the expected structure
-          mkdir -p bin/{windows,linux,macos/macos.framework,ios,android,web}
+          mkdir -p bin/{windows,linux,macos/macos.framework,web}
 
           # Ensure gdextension file is in root
           cp ../spine-godot/spine_godot_extension.gdextension bin/
@@ -253,12 +169,13 @@ jobs:
           mv gdextension-windows-$GODOT_TAG/* bin/windows/
           mv gdextension-linux-x86_64-$GODOT_TAG/* bin/linux/
           mv gdextension-macos-$GODOT_TAG/* bin/macos/
-          mv gdextension-ios-$GODOT_TAG/* bin/ios/
-          mv gdextension-android-$GODOT_TAG/* bin/android/
           mv gdextension-web-$GODOT_TAG/* bin/web/
 
-          # Create the final zip with branch and tag
-          zip -r ../spine-godot-extension-$BRANCH-$GODOT_TAG.zip spine_godot_extension.gdextension bin/
-
-          cd ..
-          aws s3 cp spine-godot-extension-$BRANCH-$GODOT_TAG.zip s3://spine-godot/$BRANCH/$GODOT_TAG/
+          # Create the final zip with tag
+          zip -r ../spine-godot-extension-$GODOT_TAG.zip spine_godot_extension.gdextension bin/
+      
+      - name: Upload zipped artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: spine-godot-extension-all-${{ env.GODOT_TAG }}
+          path: artifacts/spine-godot-extension-${{ env.GODOT_TAG }}.zip
