@@ -124,10 +124,20 @@ public:
 	template<typename T>
 	T* get_vertex_buffer_rw() { return reinterpret_cast<T*>(vertex_buffer.ptrw()); }
 
+	template<typename T>
+	const T* get_vertex_buffer() const { return reinterpret_cast<const T*>(vertex_buffer.ptr()); }
+
+	template<typename T>
+	const T* get_index_buffer() const { return reinterpret_cast<const T*>(index_buffer.ptr()); }
+
+	template<typename T>
+	const T* get_attribute_buffer() const { return reinterpret_cast<const T*>(attribute_buffer.ptr()); }
+
 	size_t get_vertex_count() const { return vertex_buffer.size() / VERTEX_ELEMENT_SIZE; }
 	size_t get_index_count() const { return index_buffer.size() / INDEX_ELEMENT_SIZE; }
 
 	bool prepare_mesh(size_t new_vertex_count, spine::Vector<uint16_t>& new_indices);
+	void assign_vertices(spine::Vector<float>& new_vertices);
 	void assign_uvs_and_color(spine::Vector<float>& new_uvs, spine::Color new_color);
 	void update_mesh();
 

@@ -160,8 +160,21 @@ void SkeletonClipping::clipTriangles(Vector<float> &vertices, Vector<unsigned sh
 	clipTriangles(vertices.buffer(), triangles.buffer(), triangles.size(), uvs.buffer(), stride);
 }
 
-void SkeletonClipping::clipTriangles(float *vertices, unsigned short *triangles,
-									 size_t trianglesLength, float *uvs, size_t stride) {
+void SkeletonClipping::clipTriangles(float *vertices, unsigned short *triangles, size_t trianglesLength, float *uvs, size_t stride)
+{
+	clipTriangles(vertices, 0, stride, triangles, trianglesLength, uvs, 0, stride);
+}
+
+bool SkeletonClipping::clipTriangles(
+	const float *vertices,
+	size_t vertices_offset,
+	size_t vertices_stride,
+	const unsigned short *triangles,
+	size_t trianglesLength,
+	const float *uvs,
+	size_t uvs_offset,
+	size_t uvs_stride)
+{
 	Vector<float> &clipOutput = _clipOutput;
 	Vector<float> &clippedVertices = _clippedVertices;
 	Vector<unsigned short> &clippedTriangles = _clippedTriangles;
@@ -173,20 +186,25 @@ void SkeletonClipping::clipTriangles(float *vertices, unsigned short *triangles,
 	_clippedUVs.clear();
 	clippedTriangles.clear();
 
+	bool clip_occurred = false;
+
 	size_t i = 0;
 continue_outer:
 	for (; i < trianglesLength; i += 3) {
-		int vertexOffset = triangles[i] * (int) stride;
+		int vertexOffset = triangles[i] * vertices_stride + vertices_offset;
+		int uvOffset = triangles[i] * uvs_stride + uvs_offset;
 		float x1 = vertices[vertexOffset], y1 = vertices[vertexOffset + 1];
-		float u1 = uvs[vertexOffset], v1 = uvs[vertexOffset + 1];
+		float u1 = uvs[uvOffset], v1 = uvs[uvOffset + 1];
 
-		vertexOffset = triangles[i + 1] * (int) stride;
+		vertexOffset = triangles[i + 1] * vertices_stride + vertices_offset;
+		uvOffset = triangles[i + 1] * uvs_stride + uvs_offset;
 		float x2 = vertices[vertexOffset], y2 = vertices[vertexOffset + 1];
-		float u2 = uvs[vertexOffset], v2 = uvs[vertexOffset + 1];
+		float u2 = uvs[uvOffset], v2 = uvs[uvOffset + 1];
 
-		vertexOffset = triangles[i + 2] * (int) stride;
+		vertexOffset = triangles[i + 2] * vertices_stride + vertices_offset;
+		uvOffset = triangles[i + 2] * uvs_stride + uvs_offset;
 		float x3 = vertices[vertexOffset], y3 = vertices[vertexOffset + 1];
-		float u3 = uvs[vertexOffset], v3 = uvs[vertexOffset + 1];
+		float u3 = uvs[uvOffset], v3 = uvs[uvOffset + 1];
 
 		for (size_t p = 0; p < polygonsCount; p++) {
 			size_t s = clippedVertices.size();
@@ -222,6 +240,7 @@ continue_outer:
 					s += 3;
 				}
 				index += clipOutputCount + 1;
+				clip_occurred = true;
 			} else {
 				clippedVertices.setSize(s + 3 * 2, 0);
 				_clippedUVs.setSize(s + 3 * 2, 0);
@@ -250,6 +269,8 @@ continue_outer:
 			}
 		}
 	}
+
+	return clip_occurred;
 }
 
 bool SkeletonClipping::isClipping() {

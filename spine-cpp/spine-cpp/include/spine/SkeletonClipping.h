@@ -57,6 +57,10 @@ namespace spine {
 		void
 		clipTriangles(Vector<float> &vertices, Vector<unsigned short> &triangles, Vector<float> &uvs, size_t stride);
 
+		bool
+		clipTriangles(const float *vertices, size_t vertices_offset, size_t vertices_stride, const unsigned short *triangles, size_t trianglesLength,
+			const float *uvs, size_t uvs_offset, size_t uvs_stride);
+
 		bool isClipping();
 
 		Vector<float> &getClippedVertices();

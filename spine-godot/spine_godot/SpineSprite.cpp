@@ -284,6 +284,18 @@ struct AttribBufferElement
 	float uv_y;
 };
 
+void SpineMesh3D::assign_vertices(spine::Vector<float>& new_vertices)
+{
+	const auto vertex_count = get_vertex_count();
+	ERR_FAIL_COND(vertex_count != new_vertices.size() / 2);
+
+	for (int i = 0; i < vertex_count; ++i)
+	{
+		const auto p = Vector2(new_vertices[i * 2], new_vertices[i * 2 + 1]);
+		memcpy(&vertex_buffer.ptrw()[vertex_layout.calculate_buffer_index(i)], &p, ELEMENT_SIZE_POSITION);
+	}
+}
+
 void SpineMesh3D::assign_uvs_and_color(spine::Vector<float>& new_uvs, spine::Color new_color)
 {
 	const auto vertex_count = get_vertex_count();
@@ -293,8 +305,6 @@ void SpineMesh3D::assign_uvs_and_color(spine::Vector<float>& new_uvs, spine::Col
 
 	for (int i = 0; i < vertex_count; ++i)
 	{
-		ERR_FAIL_COND(color_layout.calculate_buffer_index(i) >= attribute_buffer.size());
-		ERR_FAIL_COND(uv_layout.calculate_buffer_index(i) >= attribute_buffer.size());
 		const auto uv = Vector2(new_uvs[i * 2], new_uvs[i * 2 + 1]);
 		memcpy(&attribute_buffer.ptrw()[color_layout.calculate_buffer_index(i)], &color, ELEMENT_SIZE_COLOR);
 		memcpy(&attribute_buffer.ptrw()[uv_layout.calculate_buffer_index(i)], &uv, ELEMENT_SIZE_UV);
@@ -808,7 +818,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			region->computeWorldVertices(
 				*slot,
 				mesh_instance->get_vertex_buffer_rw<float>(),
-				mesh_instance->get_vertex_layout().offset,
+				mesh_instance->get_vertex_layout().offset / sizeof(float),
 				mesh_instance->get_vertex_layout().stride / sizeof(float));
 
 			renderer_object = static_cast<SpineRendererObject*>(static_cast<spine::AtlasRegion*>(region->getRegion())->page->texture);
@@ -837,7 +847,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				0,
 				mesh->getWorldVerticesLength(),
 				mesh_instance->get_vertex_buffer_rw<float>(),
-				mesh_instance->get_vertex_layout().offset,
+				mesh_instance->get_vertex_layout().offset / sizeof(float),
 				mesh_instance->get_vertex_layout().stride / sizeof(float));
 
 			renderer_object = static_cast<SpineRendererObject*>(static_cast<spine::AtlasRegion*>(mesh->getRegion())->page->texture);
@@ -866,20 +876,34 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 
 		if (skeleton_clipper->isClipping())
 		{
-			// TODO
-			// Implement clipping
-			/*
-			skeleton_clipper->clipTriangles(*vertices, *indices, *uvs, 2);
+			// Clip the mesh if necessary
+			const auto clip_occurred = skeleton_clipper->clipTriangles(
+				mesh_instance->get_vertex_buffer<float>(),
+				mesh_instance->get_vertex_layout().offset / sizeof(float),
+				mesh_instance->get_vertex_layout().stride / sizeof(float),
+				mesh_instance->get_index_buffer<uint16_t>(),
+				mesh_instance->get_index_count(),
+				mesh_instance->get_attribute_buffer<float>(), // Reinterpreting the attribute buffer as float works, because color and uvs use 4 bytes each. Otherwise it would break
+				mesh_instance->get_uv_layout().offset / sizeof(float),
+				mesh_instance->get_uv_layout().stride / sizeof(float));
+			
 			if (skeleton_clipper->getClippedTriangles().size() == 0)
 			{
 				skeleton_clipper->clipEnd(*slot);
 				continue;
 			}
 
-			vertices = &skeleton_clipper->getClippedVertices();
-			uvs = &skeleton_clipper->getClippedUVs();
-			indices = &skeleton_clipper->getClippedTriangles();
-			*/
+			// Update the mesh with the new clipped data
+			if (clip_occurred)
+			{
+				auto& clipped_vertices = skeleton_clipper->getClippedVertices();
+				auto& clipped_uvs = skeleton_clipper->getClippedUVs();
+				auto& clipped_indices = skeleton_clipper->getClippedTriangles();
+				const auto vertex_count = clipped_vertices.size() / 2;
+				mesh_instance->prepare_mesh(vertex_count, clipped_indices);
+				mesh_instance->assign_vertices(clipped_vertices);
+				mesh_instance->assign_uvs_and_color(clipped_uvs, tint);
+			}
 		}
 
 		if (mesh_instance->get_index_count() > 0)
