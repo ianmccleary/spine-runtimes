@@ -136,7 +136,7 @@ public:
 	size_t get_vertex_count() const { return vertex_buffer.size() / VERTEX_ELEMENT_SIZE; }
 	size_t get_index_count() const { return index_buffer.size() / INDEX_ELEMENT_SIZE; }
 
-	bool prepare_mesh(size_t new_vertex_count, spine::Vector<uint16_t>& new_indices);
+	bool prepare_mesh(int new_vertex_count, spine::Vector<uint16_t>& new_indices);
 	void assign_vertices(spine::Vector<float>& new_vertices);
 	void assign_uvs_and_color(spine::Vector<float>& new_uvs, spine::Color new_color);
 	void update_mesh();

@@ -199,7 +199,7 @@ ElementLayout::ElementLayout(RS::ArrayFormat format, size_t vertex_count, int32_
 	}
 }
 
-bool SpineMesh3D::prepare_mesh(size_t new_vertex_count, spine::Vector<uint16_t>& new_indices)
+bool SpineMesh3D::prepare_mesh(int new_vertex_count, spine::Vector<uint16_t>& new_indices)
 {
 	const auto current_vertex_count = get_vertex_count();
 	const auto current_index_count = get_index_count();
@@ -223,10 +223,10 @@ bool SpineMesh3D::prepare_mesh(size_t new_vertex_count, spine::Vector<uint16_t>&
 		surface_dict["primitive"] = godot::RenderingServer::PrimitiveType::PRIMITIVE_TRIANGLES;
 		surface_dict["format"] = SURFACE_FORMAT;
 		surface_dict["vertex_data"] = vertex_buffer;
-		surface_dict["vertex_count"] = Variant(new_vertex_count);
+		surface_dict["vertex_count"] = new_vertex_count;
 		surface_dict["attribute_data"] = attribute_buffer;
 		surface_dict["index_data"] = index_buffer;
-		surface_dict["index_count"] = Variant(new_index_count);
+		surface_dict["index_count"] = new_index_count;
 		surface_dict["aabb"] = godot::AABB();
 
 		// Update mesh
@@ -825,7 +825,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 
 			mesh_instance->prepare_mesh(
 				// prepare_mesh expects number of vertices, getWorldVerticesLength returns number of elements
-				mesh->getWorldVerticesLength() / 2,
+				static_cast<int>(mesh->getWorldVerticesLength()) / 2,
 				mesh->getTriangles());
 			
 			mesh->computeWorldVertices(
@@ -885,7 +885,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				auto& clipped_vertices = skeleton_clipper->getClippedVertices();
 				auto& clipped_uvs = skeleton_clipper->getClippedUVs();
 				auto& clipped_indices = skeleton_clipper->getClippedTriangles();
-				const auto vertex_count = clipped_vertices.size() / 2;
+				const auto vertex_count = static_cast<int>(clipped_vertices.size()) / 2;
 				mesh_instance->prepare_mesh(vertex_count, clipped_indices);
 				mesh_instance->assign_vertices(clipped_vertices);
 				mesh_instance->assign_uvs_and_color(clipped_uvs, tint);
