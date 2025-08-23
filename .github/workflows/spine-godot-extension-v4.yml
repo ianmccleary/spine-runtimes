@@ -177,5 +177,5 @@ jobs:
       - name: Upload zipped artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: spine-godot-extension-all-${{ env.GODOT_TAG }}
-          path: artifacts/spine-godot-extension-${{ env.GODOT_TAG }}.zip
+          name: spine-godot-3d-gdextension-${{ env.GODOT_TAG }}
+          path: spine-godot-extension-${{ env.GODOT_TAG }}.zip
