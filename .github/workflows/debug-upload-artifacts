@@ -1,0 +1,81 @@
+name: Upload to Artifacts Only
+
+on:
+  workflow_call:
+    inputs:
+      godot_tag:
+        required: true
+        type: string
+        default: "Godot tag not specified!"
+      godot_version:
+        required: true
+        type: string
+        default: "Godot version not specified!"
+      dev:
+        required: true
+        type: boolean
+        default: false
+
+env:
+  GODOT_TAG: ${{ inputs.godot_tag }}
+  GODOT_VERSION: ${{ inputs.godot_version }}
+  DEV_BUILD: ${{ inputs.dev }}
+
+jobs:
+  upload-to-artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Download windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gdextension-windows-${{ env.GODOT_TAG }}
+          path: artifacts/gdextension-windows-${{ env.GODOT_TAG }}
+
+      - name: Download linux-x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gdextension-linux-x86_64-${{ env.GODOT_TAG }}
+          path: artifacts/gdextension-linux-x86_64-${{ env.GODOT_TAG }}
+
+      - name: Download macos artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gdextension-macos-${{ env.GODOT_TAG }}
+          path: artifacts/gdextension-macos-${{ env.GODOT_TAG }}
+
+      - name: Download web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: gdextension-web-${{ env.GODOT_TAG }}
+          path: artifacts/gdextension-web-${{ env.GODOT_TAG }}
+
+      - name: Package artifacts
+        shell: bash
+        run: |
+          cd artifacts
+
+          # Create directories matching the expected structure
+          mkdir -p bin/{windows,linux,macos/macos.framework,web}
+
+          # Ensure gdextension file is in root
+          cp ../spine-godot/spine_godot_extension.gdextension bin/
+
+          # Move artifacts to their correct locations
+          mv gdextension-windows-$GODOT_TAG/* bin/windows/
+          mv gdextension-linux-x86_64-$GODOT_TAG/* bin/linux/
+          mv gdextension-macos-$GODOT_TAG/* bin/macos/
+          mv gdextension-web-$GODOT_TAG/* bin/web/
+
+          # Create the final zip with tag
+          zip -r ../spine-godot-extension-$GODOT_TAG.zip spine_godot_extension.gdextension bin/
+      
+      - name: Upload zipped artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: spine-godot-3d-gdextension-${{ env.GODOT_TAG }}
+          path: spine-godot-extension-${{ env.GODOT_TAG }}.zip
