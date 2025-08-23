@@ -108,7 +108,7 @@ void register_spine_godot_types() {
 #endif
 #endif
 #endif
-	spine::Bone::setYDown(true);
+	spine::Bone::setYDown(false);
 
 	GDREGISTER_CLASS(SpineAtlasResourceFormatLoader);
 	GDREGISTER_CLASS(SpineAtlasResourceFormatSaver);
