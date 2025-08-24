@@ -49,7 +49,7 @@
 #include <godot_cpp/classes/font.hpp>
 #endif
 
-SpineMesh3D::SpineMesh3D() : renderer_object(nullptr)
+SpineMesh3D::SpineMesh3D() : renderer_object(nullptr), winding(0.f)
 {
 	if (RS::get_singleton())
 	{
