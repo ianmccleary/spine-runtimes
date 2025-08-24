@@ -110,6 +110,7 @@ protected:
 	ElementLayout tangent_layout;
 	ElementLayout uv_layout;
 	ElementLayout color_layout;
+	float winding;
 
 public:
 	SpineMesh3D();
@@ -139,6 +140,7 @@ public:
 	bool prepare_mesh(int new_vertex_count, const uint16_t* new_indices, int new_index_count);
 	void assign_vertices(spine::Vector<float>& new_vertices);
 	void assign_uvs_and_color(spine::Vector<float>& new_uvs, spine::Color new_color);
+	void update_normals(float attachment_scale_x, float attachment_scale_y);
 	void update_mesh();
 
 	void set_material(Ref<Material> new_material);

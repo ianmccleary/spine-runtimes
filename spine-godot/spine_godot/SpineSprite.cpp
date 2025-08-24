@@ -183,15 +183,6 @@ bool SpineMesh3D::prepare_mesh(int new_vertex_count, const uint16_t* new_indices
 
 		vertex_buffer = new_vertex_buffer;
 		attribute_buffer = new_attribute_buffer;
-
-		// Fill normals and tangents, as they never change
-		const auto cnt = compress_normal(Vector3(0.f, 0.f, 1.f));
-		for (int i = 0; i < new_vertex_count; ++i)
-		{
-			ERR_FAIL_COND_V(normal_layout.calculate_buffer_index(i) >= vertex_buffer.size(), true);
-			memcpy(&vertex_buffer.ptrw()[normal_layout.calculate_buffer_index(i)], &cnt, sizeof(::CompressedNormalTangent));
-		}
-
 		return true;
 	}
 
@@ -229,6 +220,21 @@ void SpineMesh3D::assign_uvs_and_color(spine::Vector<float>& new_uvs, spine::Col
 		const auto uv = Vector2(new_uvs[i * 2], new_uvs[i * 2 + 1]);
 		memcpy(&attribute_buffer.ptrw()[color_layout.calculate_buffer_index(i)], &color, ELEMENT_SIZE_COLOR);
 		memcpy(&attribute_buffer.ptrw()[uv_layout.calculate_buffer_index(i)], &uv, ELEMENT_SIZE_UV);
+	}
+}
+
+void SpineMesh3D::update_normals(float attachment_scale_x, float attachment_scale_y)
+{
+	auto new_winding = godot::Math::sign(attachment_scale_x) * godot::Math::sign(attachment_scale_y);
+	if (!godot::Math::is_equal_approx(new_winding, winding))
+	{
+		winding = new_winding;
+		const auto vertex_count = get_vertex_count();
+		const auto normal = compress_normal(Vector3(0.f, 0.f, winding));
+		for (int i = 0; i < vertex_count; ++i)
+		{
+			memcpy(&vertex_buffer.ptrw()[normal_layout.calculate_buffer_index(i)], &normal, sizeof(::CompressedNormalTangent));
+		}
 	}
 }
 
@@ -743,6 +749,10 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			mesh_instance->assign_uvs_and_color(
 				region->getUVs(),
 				tint);
+			
+			mesh_instance->update_normals(
+				slot->getBone().getScaleX() * region->getScaleX(),
+				slot->getBone().getScaleY() * region->getScaleY());
 		}
 		else if (attachment->getRTTI().isExactly(spine::MeshAttachment::rtti))
 		{
@@ -773,6 +783,10 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			mesh_instance->assign_uvs_and_color(
 				mesh->getUVs(),
 				tint);
+			
+			mesh_instance->update_normals(
+				slot->getBone().getScaleX(),
+				slot->getBone().getScaleY());
 		}
 		else if (attachment->getRTTI().isExactly(spine::ClippingAttachment::rtti))
 		{
