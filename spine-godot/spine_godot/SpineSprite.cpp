@@ -223,10 +223,10 @@ void SpineMesh3D::assign_uvs_and_color(spine::Vector<float>& new_uvs, spine::Col
 	}
 }
 
-void SpineMesh3D::update_normals(float attachment_scale_x, float attachment_scale_y)
+void SpineMesh3D::update_normals(float attachment_scale_x, float attachment_scale_y, bool force)
 {
 	auto new_winding = godot::Math::sign(attachment_scale_x) * godot::Math::sign(attachment_scale_y);
-	if (!godot::Math::is_equal_approx(new_winding, winding))
+	if (force || !godot::Math::is_equal_approx(new_winding, winding))
 	{
 		winding = new_winding;
 		const auto vertex_count = get_vertex_count();
@@ -723,6 +723,9 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 		spine::Color tint(skeleton_color.r * slot_color.r, skeleton_color.g * slot_color.g, skeleton_color.b * slot_color.b, skeleton_color.a * slot_color.a);
 		SpineRendererObject *renderer_object;
 
+		auto attachment_scale = Vector2(0.f, 0.f);
+		auto force_update_normals = false;
+
 		if (attachment->getRTTI().isExactly(spine::RegionAttachment::rtti))
 		{
 			const auto region = static_cast<spine::RegionAttachment*>(attachment);
@@ -750,7 +753,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				region->getUVs(),
 				tint);
 			
-			mesh_instance->update_normals(
+			attachment_scale = Vector2(
 				slot->getBone().getScaleX() * region->getScaleX(),
 				slot->getBone().getScaleY() * region->getScaleY());
 		}
@@ -784,7 +787,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				mesh->getUVs(),
 				tint);
 			
-			mesh_instance->update_normals(
+			attachment_scale = Vector2(
 				slot->getBone().getScaleX(),
 				slot->getBone().getScaleY());
 		}
@@ -809,7 +812,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				mesh_instance->get_vertex_layout().stride / sizeof(float),
 				mesh_instance->get_index_buffer<uint16_t>(),
 				mesh_instance->get_index_count(),
-				mesh_instance->get_attribute_buffer<float>(), // Reinterpreting the attribute buffer as float works, because color and uvs use 4 bytes each. Otherwise it would break
+				mesh_instance->get_attribute_buffer<float>(), // Reinterpreting the attribute buffer as float works, because color, u and v use 4 bytes each. Otherwise it would break
 				mesh_instance->get_uv_layout().offset / sizeof(float),
 				mesh_instance->get_uv_layout().stride / sizeof(float));
 			
@@ -829,12 +832,14 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 				mesh_instance->prepare_mesh(vertex_count, clipped_indices.buffer(), clipped_indices.size());
 				mesh_instance->assign_vertices(clipped_vertices);
 				mesh_instance->assign_uvs_and_color(clipped_uvs, tint);
+				force_update_normals = true;
 			}
 		}
 
 		if (mesh_instance->get_index_count() > 0)
 		{
 			mesh_instance->renderer_object = renderer_object;
+			
 
 			spine::BlendMode blend_mode = slot->getData().getBlendMode();
 			Ref<Material> custom_material;
@@ -887,6 +892,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			if (custom_material.is_valid())
 				mesh_instance->set_material(custom_material);
 			
+			mesh_instance->update_normals(attachment_scale.x, attachment_scale.y, force_update_normals);
 			mesh_instance->update_mesh();
 			mesh_instance->set_visible(true);
 		}
