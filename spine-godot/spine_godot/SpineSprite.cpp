@@ -303,6 +303,9 @@ void SpineSprite::_bind_methods()
 	ClassDB::bind_method(D_METHOD("get_z_spacing"), &SpineSprite::get_z_spacing);
 	ClassDB::bind_method(D_METHOD("set_z_spacing", "v"), &SpineSprite::set_z_spacing);
 
+	ClassDB::bind_method(D_METHOD("get_layer_mask"), &SpineSprite::get_layer_mask);
+	ClassDB::bind_method(D_METHOD("set_layer_mask", "mask"), &SpineSprite::set_layer_mask);
+
 	ClassDB::bind_method(D_METHOD("get_use_aabb_sorting"), &SpineSprite::get_use_aabb_sorting);
 	ClassDB::bind_method(D_METHOD("set_use_aabb_sorting", "v"), &SpineSprite::set_use_aabb_sorting);
 	
@@ -332,6 +335,7 @@ void SpineSprite::_bind_methods()
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_aabb_sorting"), "set_use_aabb_sorting", "get_use_aabb_sorting");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "use_sorting_offset"), "set_use_sorting_offset", "get_use_sorting_offset");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "sorting_offset_multiplier"), "set_sorting_offset_multiplier", "get_sorting_offset_multiplier");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "layers", PROPERTY_HINT_LAYERS_3D_RENDER), "set_layer_mask", "get_layer_mask");
 	ADD_GROUP("Materials", "");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "normal_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_normal_material", "get_normal_material");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "additive_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_additive_material", "get_additive_material");
@@ -1057,6 +1061,20 @@ void SpineSprite::set_z_spacing(float value)
 float SpineSprite::get_z_spacing()
 {
 	return z_spacing;
+}
+
+void SpineSprite::set_layer_mask(int mask)
+{
+	layers = mask;
+	for (const auto mesh_instance : mesh_instances)
+	{
+		mesh_instance->set_layer_mask(layers);
+	}
+}
+
+int SpineSprite::get_layer_mask()
+{
+	return layers;
 }
 
 void SpineSprite::set_use_aabb_sorting(bool value)

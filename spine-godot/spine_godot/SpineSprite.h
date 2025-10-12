@@ -159,6 +159,7 @@ protected:
 	SpineConstant::UpdateMode update_mode;
 	float time_scale;
 	float z_spacing = 0.f;
+	int layers = 1;
 
 	String preview_skin;
 	String preview_animation;
@@ -209,7 +210,6 @@ public:
 	void update_skeleton(float delta);
 
 	Transform3D get_global_bone_transform(const String &bone_name);
-
 	void set_global_bone_transform(const String &bone_name, Transform3D transform);
 
 	SpineConstant::UpdateMode get_update_mode();
@@ -219,28 +219,25 @@ public:
 	Ref<SpineSkin> new_skin(const String &name);
 
 	Ref<Material> get_normal_material();
-
 	void set_normal_material(Ref<Material> material);
 
 	Ref<Material> get_additive_material();
-
 	void set_additive_material(Ref<Material> material);
 
 	Ref<Material> get_multiply_material();
-
 	void set_multiply_material(Ref<Material> material);
 
 	Ref<Material> get_screen_material();
-
 	void set_screen_material(Ref<Material> material);
 
 	void set_time_scale(float time_scale);
-
 	float get_time_scale();
 
 	void set_z_spacing(float value);
-
 	float get_z_spacing();
+
+	void set_layer_mask(int mask);
+	int get_layer_mask();
 
 	bool get_use_aabb_sorting() const { return use_aabb_sorting; }
 	void set_use_aabb_sorting(bool value);
