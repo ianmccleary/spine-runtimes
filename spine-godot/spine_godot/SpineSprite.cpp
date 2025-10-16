@@ -298,21 +298,24 @@ void SpineSprite::_bind_methods()
 	ClassDB::bind_method(D_METHOD("get_screen_material"), &SpineSprite::get_screen_material);
 
 	ClassDB::bind_method(D_METHOD("get_time_scale"), &SpineSprite::get_time_scale);
-	ClassDB::bind_method(D_METHOD("set_time_scale", "v"), &SpineSprite::set_time_scale);
+	ClassDB::bind_method(D_METHOD("set_time_scale", "time_scale"), &SpineSprite::set_time_scale);
 
 	ClassDB::bind_method(D_METHOD("get_z_spacing"), &SpineSprite::get_z_spacing);
-	ClassDB::bind_method(D_METHOD("set_z_spacing", "v"), &SpineSprite::set_z_spacing);
+	ClassDB::bind_method(D_METHOD("set_z_spacing", "spacing"), &SpineSprite::set_z_spacing);
 
 	ClassDB::bind_method(D_METHOD("get_layer_mask"), &SpineSprite::get_layer_mask);
 	ClassDB::bind_method(D_METHOD("set_layer_mask", "mask"), &SpineSprite::set_layer_mask);
 
 	ClassDB::bind_method(D_METHOD("get_use_aabb_sorting"), &SpineSprite::get_use_aabb_sorting);
-	ClassDB::bind_method(D_METHOD("set_use_aabb_sorting", "v"), &SpineSprite::set_use_aabb_sorting);
+	ClassDB::bind_method(D_METHOD("set_use_aabb_sorting", "enabled"), &SpineSprite::set_use_aabb_sorting);
+
+	ClassDB::bind_method(D_METHOD("set_instance_shader_parameter", "name", "value"), &SpineSprite::set_instance_shader_parameter);
+	ClassDB::bind_method(D_METHOD("get_instance_shader_parameter", "name"), &SpineSprite::get_instance_shader_parameter);
 	
 	ClassDB::bind_method(D_METHOD("get_use_sorting_offset"), &SpineSprite::get_use_sorting_offset);
-	ClassDB::bind_method(D_METHOD("set_use_sorting_offset", "v"), &SpineSprite::set_use_sorting_offset);
+	ClassDB::bind_method(D_METHOD("set_use_sorting_offset", "enable_sorting_offset"), &SpineSprite::set_use_sorting_offset);
 	ClassDB::bind_method(D_METHOD("get_sorting_offset_multiplier"), &SpineSprite::get_sorting_offset_multiplier);
-	ClassDB::bind_method(D_METHOD("set_sorting_offset_multiplier", "v"), &SpineSprite::set_sorting_offset_multiplier);
+	ClassDB::bind_method(D_METHOD("set_sorting_offset_multiplier", "sorting_offset_multiplier"), &SpineSprite::set_sorting_offset_multiplier);
 
 	ClassDB::bind_method(D_METHOD("update_skeleton", "delta"), &SpineSprite::update_skeleton);
 	ClassDB::bind_method(D_METHOD("new_skin", "name"), &SpineSprite::new_skin);
