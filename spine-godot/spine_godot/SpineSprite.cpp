@@ -517,25 +517,34 @@ void SpineSprite::_get_property_list(List<PropertyInfo> *list) const
 {
 	if (!mesh_instances.is_empty())
 	{
-		const auto first_mesh_instance = mesh_instances[0];
-		const auto pinfo = RS::get_singleton()->instance_geometry_get_shader_parameter_list(first_mesh_instance->get_instance());
-		for (int i = 0; i < pinfo.size(); ++i)
+		HashMap<StringName, PropertyInfo> pis;
+		for (const auto mesh_instance : mesh_instances)
 		{
-			auto pi = PropertyInfo::from_dict(pinfo[i]);
-			
-			bool has_def_value = false;
-			Variant def_value = RS::get_singleton()->instance_geometry_get_shader_parameter_default_value(first_mesh_instance->get_instance(), pi.name);
-			if (def_value.get_type() != Variant::NIL) {
-				has_def_value = true;
-			}
-			if (instance_shader_parameters.has(pi.name)) {
-				pi.usage = PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_STORAGE | (has_def_value ? (PROPERTY_USAGE_CHECKABLE | PROPERTY_USAGE_CHECKED) : PROPERTY_USAGE_NONE);
-			} else {
-				pi.usage = PROPERTY_USAGE_EDITOR | (has_def_value ? PROPERTY_USAGE_CHECKABLE : PROPERTY_USAGE_NONE); //do not save if not changed
-			}
+			const auto pinfos = RS::get_singleton()->instance_geometry_get_shader_parameter_list(mesh_instance->get_instance());
+			for (const auto& pinfo : pinfos)
+			{
+				auto pi = PropertyInfo::from_dict(pinfo);
+				pi.name = "instance_shader_parameters/" + pi.name;
+				if (!pis.has(pi.name))
+				{
+					bool has_def_value = false;
+					Variant def_value = RS::get_singleton()->instance_geometry_get_shader_parameter_default_value(mesh_instance->get_instance(), pi.name);
+					if (def_value.get_type() != Variant::NIL) {
+						has_def_value = true;
+					}
+					if (instance_shader_parameters.has(pi.name)) {
+						pi.usage = PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_STORAGE | (has_def_value ? (PROPERTY_USAGE_CHECKABLE | PROPERTY_USAGE_CHECKED) : PROPERTY_USAGE_NONE);
+					} else {
+						pi.usage = PROPERTY_USAGE_EDITOR | (has_def_value ? PROPERTY_USAGE_CHECKABLE : PROPERTY_USAGE_NONE); //do not save if not changed
+					}
 
-			pi.name = "instance_shader_parameters/" + pi.name;
-			list->push_back(pi);
+					pis.insert(pi.name, pi);
+				}
+			}
+		}
+		for (const auto& pi : pis)
+		{
+			list->push_back(pi.value);
 		}
 	}
 
@@ -933,8 +942,7 @@ void SpineSprite::update_meshes(Ref<SpineSkeleton> skeleton_ref)
 			}
 
 			// Set the custom material, or the default material
-			if (custom_material.is_valid())
-				mesh_instance->set_material(custom_material);
+			mesh_instance->set_material(custom_material);
 			
 			mesh_instance->update_normals(attachment_scale.x, attachment_scale.y, force_update_normals);
 			mesh_instance->update_mesh();
@@ -1193,13 +1201,16 @@ Variant SpineSprite::get_instance_shader_parameter(const StringName &p_name) con
 {
 	if (mesh_instances.size() > 0)
 	{
-		const auto first_mesh_instance = mesh_instances[0];
-		return RS::get_singleton()->instance_geometry_get_shader_parameter(first_mesh_instance->get_instance(), p_name);
+		for (const auto& mesh_instance : mesh_instances)
+		{
+			const auto shader_param = RS::get_singleton()->instance_geometry_get_shader_parameter(mesh_instance->get_instance(), p_name);
+			if (shader_param.get_type() != Variant::NIL)
+			{
+				return shader_param;
+			}
+		}
 	}
-	else
-	{
-		return Variant();
-	}
+	return Variant();
 }
 
 #ifndef SPINE_GODOT_EXTENSION
