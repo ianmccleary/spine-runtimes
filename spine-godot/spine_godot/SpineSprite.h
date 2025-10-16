@@ -34,6 +34,7 @@
 #include "SpineCommon.h"
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/visual_instance3d.hpp>
+#include <godot_cpp/templates/hash_map.hpp>
 #include <godot_cpp/templates/vector.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/canvas_item_material.hpp>
@@ -169,6 +170,9 @@ protected:
 	bool use_sorting_offset = true;
 	float sorting_offset_multiplier = .1f;
 	bool use_aabb_sorting = false;
+	
+	mutable HashMap<StringName, Variant> instance_shader_parameters;
+	mutable HashMap<StringName, StringName> instance_shader_parameter_property_remap;
 
 	spine::Vector<spine::Vector<SpineSlotNode *>> slot_nodes;
 	Vector<SpineMesh3D *> mesh_instances;
@@ -192,6 +196,8 @@ protected:
 	void set_modified_bones() { modified_bones = true; }
 
 	void callback(spine::AnimationState *state, spine::EventType type, spine::TrackEntry *entry, spine::Event *event) override;
+
+	const StringName* _instance_uniform_get_remap(const StringName &p_name) const;
 
 public:
 	SpineSprite();
@@ -247,6 +253,9 @@ public:
 
 	float get_sorting_offset_multiplier() const { return sorting_offset_multiplier; }
 	void set_sorting_offset_multiplier(float value) { sorting_offset_multiplier = value; }
+
+	void set_instance_shader_parameter(const StringName &p_name, const Variant &p_value);
+	Variant get_instance_shader_parameter(const StringName &p_name) const;
 
 #ifndef SPINE_GODOT_EXTENSION
 // FIXME

@@ -341,9 +341,6 @@ void SpineSprite::_bind_methods()
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "additive_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_additive_material", "get_additive_material");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "multiply_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_multiply_material", "get_multiply_material");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "screen_material", PROPERTY_HINT_RESOURCE_TYPE, "Material"), "set_screen_material", "get_screen_material");
-
-	ADD_GROUP("Preview", "");
-	// Filled in in _get_property_list()
 }
 
 SpineSprite::SpineSprite()
@@ -515,8 +512,34 @@ void SpineSprite::_notification(int what)
 
 void SpineSprite::_get_property_list(List<PropertyInfo> *list) const
 {
+	if (!mesh_instances.is_empty())
+	{
+		const auto first_mesh_instance = mesh_instances[0];
+		const auto pinfo = RS::get_singleton()->instance_geometry_get_shader_parameter_list(first_mesh_instance->get_instance());
+		for (int i = 0; i < pinfo.size(); ++i)
+		{
+			auto pi = PropertyInfo::from_dict(pinfo[i]);
+			
+			bool has_def_value = false;
+			Variant def_value = RS::get_singleton()->instance_geometry_get_shader_parameter_default_value(first_mesh_instance->get_instance(), pi.name);
+			if (def_value.get_type() != Variant::NIL) {
+				has_def_value = true;
+			}
+			if (instance_shader_parameters.has(pi.name)) {
+				pi.usage = PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_STORAGE | (has_def_value ? (PROPERTY_USAGE_CHECKABLE | PROPERTY_USAGE_CHECKED) : PROPERTY_USAGE_NONE);
+			} else {
+				pi.usage = PROPERTY_USAGE_EDITOR | (has_def_value ? PROPERTY_USAGE_CHECKABLE : PROPERTY_USAGE_NONE); //do not save if not changed
+			}
+
+			pi.name = "instance_shader_parameters/" + pi.name;
+			list->push_back(pi);
+		}
+	}
+
 	if (!skeleton_data_res.is_valid() || !skeleton_data_res->is_skeleton_data_loaded())
 		return;
+	
+	list->push_back(PropertyInfo(Variant::NIL, "Preview", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_GROUP));
 	
 	PackedStringArray animation_names;
 	PackedStringArray skin_names;
@@ -564,6 +587,13 @@ void SpineSprite::_get_property_list(List<PropertyInfo> *list) const
 
 bool SpineSprite::_get(const StringName &property, Variant &value) const
 {
+	const auto r = _instance_uniform_get_remap(property);
+	if (r)
+	{
+		value = get_instance_shader_parameter(*r);
+		return true;
+	}
+
 	if (property == StringName("preview_skin"))
 	{
 		value = preview_skin;
@@ -623,6 +653,13 @@ static void update_preview_animation(SpineSprite *sprite, const String &skin, co
 
 bool SpineSprite::_set(const StringName &property, const Variant &value)
 {
+	const auto r = _instance_uniform_get_remap(property);
+	if (r)
+	{
+		set_instance_shader_parameter(*r, value);
+		return true;
+	}
+
 	if (property == StringName("preview_skin"))
 	{
 		preview_skin = value;
@@ -1096,6 +1133,69 @@ void SpineSprite::set_use_sorting_offset(bool value)
 		{
 			mesh_instance->set_sorting_offset(0.f);
 		}
+	}
+}
+
+const StringName* SpineSprite::_instance_uniform_get_remap(const StringName &p_name) const
+{
+	const auto r = instance_shader_parameter_property_remap.getptr(p_name);
+	if (!r)
+	{
+		String s = p_name;
+		if (s.begins_with("instance_shader_parameters/"))
+		{
+			StringName pname = StringName(s);
+			StringName name = s.replace("instance_shader_parameters/", "");
+			instance_shader_parameter_property_remap[pname] = name;
+			return instance_shader_parameter_property_remap.getptr(pname);
+		}
+		return nullptr;
+	}
+	return r;
+}
+
+void SpineSprite::set_instance_shader_parameter(const StringName &p_name, const Variant &p_value)
+{
+	if (p_value.get_type() == Variant::NIL)
+	{
+		for (const auto mesh_instance : mesh_instances)
+		{
+			Variant def_value = RS::get_singleton()->instance_geometry_get_shader_parameter_default_value(mesh_instance->get_instance(), p_name);
+			RS::get_singleton()->instance_geometry_set_shader_parameter(mesh_instance->get_instance(), p_name, def_value);
+		}
+		instance_shader_parameters.erase(p_value);
+	}
+	else
+	{
+		instance_shader_parameters[p_name] = p_value;
+		if (p_value.get_type() == Variant::OBJECT)
+		{
+			RID tex_id = p_value;
+			for (const auto mesh_instance : mesh_instances)
+			{
+				RS::get_singleton()->instance_geometry_set_shader_parameter(mesh_instance->get_instance(), p_name, tex_id);
+			}
+		}
+		else
+		{
+			for (const auto mesh_instance : mesh_instances)
+			{
+				RS::get_singleton()->instance_geometry_set_shader_parameter(mesh_instance->get_instance(), p_name, p_value);
+			}
+		}
+	}
+}
+
+Variant SpineSprite::get_instance_shader_parameter(const StringName &p_name) const
+{
+	if (mesh_instances.size() > 0)
+	{
+		const auto first_mesh_instance = mesh_instances[0];
+		return RS::get_singleton()->instance_geometry_get_shader_parameter(first_mesh_instance->get_instance(), p_name);
+	}
+	else
+	{
+		return Variant();
 	}
 }
 
