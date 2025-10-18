@@ -175,6 +175,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: spine-godot-3d-gdextension-${{ env.GODOT_TAG }}
-          path: |
-            bin/
-            spine_godot_extension.gdextension
+          path: artifacts/bin/
